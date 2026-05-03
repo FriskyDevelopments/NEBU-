@@ -29,3 +29,12 @@ venv/
 
 # Prevent accidental submodule re-addition (was previously misconfigured as a submodule)
 Nebulosa
+
+# Backup and local env files
+.env.backup.*
+.env.full
+.env.localhost
+
+# Runtime
+logs.json
+package-lock.json
