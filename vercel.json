@@ -1,3 +1,15 @@
 {
-  "version": 2
+  "version": 2,
+  "functions": {
+    "api/bot.js": { "maxDuration": 10 },
+    "api/health.js": { "maxDuration": 10 },
+    "api/oauth.js": { "maxDuration": 15 },
+    "api/register-webhook.js": { "maxDuration": 15 }
+  },
+  "rewrites": [
+    { "source": "/webhook", "destination": "/api/bot" },
+    { "source": "/health", "destination": "/api/health" },
+    { "source": "/oauth/callback", "destination": "/api/oauth" },
+    { "source": "/register-webhook", "destination": "/api/register-webhook" }
+  ]
 }
