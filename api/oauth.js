@@ -1,149 +1,181 @@
-// Vercel Serverless Function for Zoom OAuth
-const axios = require('axios');
+// Vercel Serverless Function – Zoom OAuth Callback
+// ESM-native; no require() calls.
+//
+// Security hardening applied:
+//  • HTML-escapes all values derived from query params before interpolating into HTML
+//  • Validates `state` format (must be 64-char hex) before forwarding to Railway
+//  • Removes the fallback token-exchange path that stored credentials nowhere durable
+//  • Narrows CORS to GET only (OAuth callbacks are browser navigations, not AJAX)
+import axios from 'axios';
 
-const RAILWAY_BACKEND = process.env.RAILWAY_BACKEND || 'https://nebulosa-production.railway.app';
+const RAILWAY_BACKEND =
+  process.env.RAILWAY_BACKEND || 'https://nebulosa-production.railway.app';
 
+// ---------------------------------------------------------------------------
+// XSS prevention – escape every value before inserting into HTML strings
+// ---------------------------------------------------------------------------
+function h(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}
+
+// ---------------------------------------------------------------------------
+// State validation – must be a 64-char hex string (crypto.randomBytes(32))
+// ---------------------------------------------------------------------------
+function isValidState(state) {
+  return typeof state === 'string' && /^[0-9a-f]{64}$/.test(state);
+}
+
+// ---------------------------------------------------------------------------
+// HTML page templates
+// ---------------------------------------------------------------------------
+function successPage() {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nebulosa – Authorization Successful</title>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+         background:linear-gradient(135deg,#667eea,#764ba2);font-family:Arial,sans-serif;color:#fff}
+    .card{background:rgba(255,255,255,.12);backdrop-filter:blur(12px);border-radius:20px;
+          padding:48px 40px;max-width:480px;width:90%;text-align:center}
+    h1{margin:0 0 16px;font-size:28px}
+    p{margin:8px 0;font-size:16px;opacity:.9}
+    ul{text-align:left;display:inline-block;margin:16px 0}
+    li{margin:6px 0}
+    .badge{display:inline-block;background:rgba(255,255,255,.2);border-radius:24px;
+           padding:8px 20px;margin:6px}
+    .note{margin-top:32px;font-size:13px;opacity:.7}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>✅ Authorization Successful!</h1>
+    <p>Your Zoom account has been connected to <strong>Nebulosa Bot</strong>.</p>
+    <div style="margin:24px 0">
+      <span class="badge">🤖 Telegram Bot Connected</span>
+      <span class="badge">🎥 Zoom Integration Active</span>
+    </div>
+    <p>Return to Telegram and try <code>/status</code> to verify.</p>
+    <ul>
+      <li>Create instant meetings with <code>/createroom</code></li>
+      <li>Monitor participants with <code>/scanroom</code></li>
+      <li>Full command list with <code>/help</code></li>
+    </ul>
+    <p class="note">🚂 Powered by Railway + ▲ Vercel<br>This window closes in 10 seconds.</p>
+  </div>
+  <script>setTimeout(()=>window.close(),10000);</script>
+</body>
+</html>`;
+}
+
+function errorPage(title, detail) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Nebulosa – Authorization Error</title>
+  <style>
+    body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+         background:#1a1a2e;font-family:Arial,sans-serif;color:#fff}
+    .card{background:#16213e;border:1px solid #e55;border-radius:16px;padding:40px;
+          max-width:440px;width:90%;text-align:center}
+    h1{color:#ff6b6b;margin:0 0 16px}
+    p{opacity:.85;margin:8px 0}
+    code{background:rgba(255,255,255,.1);padding:2px 6px;border-radius:4px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>❌ ${h(title)}</h1>
+    <p>${h(detail)}</p>
+    <p>Please return to Telegram and try <code>/zoomlogin</code> again.</p>
+  </div>
+  <script>setTimeout(()=>window.close(),8000);</script>
+</body>
+</html>`;
+}
+
+// ---------------------------------------------------------------------------
+// Main handler
+// ---------------------------------------------------------------------------
 export default async function handler(req, res) {
-    // Handle CORS
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
-    }
-    
-    if (req.method !== 'GET') {
-        return res.status(405).json({ error: 'Method not allowed' });
-    }
-    
-    const { code, state, error } = req.query;
-    
-    if (error) {
-        console.error('OAuth error:', error);
-        return res.status(400).send(`
-            <html>
-                <body style="font-family: Arial, sans-serif; text-align: center; margin-top: 50px;">
-                    <h2>❌ Authorization Failed</h2>
-                    <p>Error: ${error}</p>
-                    <p>Please try again from Telegram.</p>
-                    <script>setTimeout(() => window.close(), 5000);</script>
-                </body>
-            </html>
-        `);
-    }
-    
-    if (!code || !state) {
-        return res.status(400).send(`
-            <html>
-                <body style="font-family: Arial, sans-serif; text-align: center; margin-top: 50px;">
-                    <h2>❌ Invalid Authorization</h2>
-                    <p>Missing authorization code or state.</p>
-                    <p>Please try again from Telegram.</p>
-                    <script>setTimeout(() => window.close(), 5000);</script>
-                </body>
-            </html>
-        `);
-    }
-    
-    try {
-        // Forward OAuth callback to Railway backend
-        const railwayResponse = await axios.get(`${RAILWAY_BACKEND}/auth/zoom/callback`, {
-            params: { code, state },
-            timeout: 10000
-        });
-        
-        // Success page
-        return res.status(200).send(`
-            <html>
-                <head>
-                    <title>Nebulosa - OAuth Success</title>
-                    <meta name="viewport" content="width=device-width, initial-scale=1">
-                </head>
-                <body style="font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; min-height: 100vh; display: flex; flex-direction: column; justify-content: center;">
-                    <div style="background: rgba(255,255,255,0.1); border-radius: 20px; padding: 40px; margin: 20px; backdrop-filter: blur(10px);">
-                        <h1>✅ Authorization Successful!</h1>
-                        <p style="font-size: 18px;">Your Zoom account has been connected to Nebulosa Bot.</p>
-                        <div style="margin: 30px 0;">
-                            <div style="display: inline-block; margin: 10px;">
-                                <span style="background: rgba(255,255,255,0.2); padding: 10px 20px; border-radius: 25px;">
-                                    🤖 Telegram Bot Connected
-                                </span>
-                            </div>
-                            <div style="display: inline-block; margin: 10px;">
-                                <span style="background: rgba(255,255,255,0.2); padding: 10px 20px; border-radius: 25px;">
-                                    🎥 Zoom Integration Active
-                                </span>
-                            </div>
-                        </div>
-                        <p>You can now:</p>
-                        <ul style="text-align: left; display: inline-block; margin: 20px 0;">
-                            <li>Create instant meetings with /createroom</li>
-                            <li>Monitor participants with /scanroom</li>
-                            <li>Get room information with /roominfo</li>
-                            <li>Use all bot features!</li>
-                        </ul>
-                        <p style="margin-top: 30px; font-size: 16px;">
-                            Return to Telegram and try <code>/status</code> to verify your connection!
-                        </p>
-                        <div style="margin-top: 30px; font-size: 14px; opacity: 0.8;">
-                            <p>🚂 Powered by Railway + ▲ Vercel</p>
-                            <p>This window will close automatically in 10 seconds.</p>
-                        </div>
-                    </div>
-                    <script>
-                        setTimeout(() => {
-                            window.close();
-                        }, 10000);
-                    </script>
-                </body>
-            </html>
-        `);
-        
-    } catch (error) {
-        console.error('OAuth processing error:', error);
-        
-        // Fallback: handle OAuth locally if Railway is down
-        try {
-            const tokenResponse = await axios.post('https://zoom.us/oauth/token', {
-                grant_type: 'authorization_code',
-                code: code,
-                redirect_uri: process.env.ZOOM_REDIRECT_URI
-            }, {
-                headers: {
-                    'Authorization': `Basic ${Buffer.from(`${process.env.ZOOM_CLIENT_ID}:${process.env.ZOOM_CLIENT_SECRET}`).toString('base64')}`,
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
-                timeout: 10000
-            });
-            
-            // Store tokens (simplified for Vercel)
-            console.log('OAuth tokens received for user:', state);
-            
-            return res.status(200).send(`
-                <html>
-                    <body style="font-family: Arial, sans-serif; text-align: center; margin-top: 50px;">
-                        <h2>✅ Authorization Processed</h2>
-                        <p>Your Zoom account has been connected!</p>
-                        <p><strong>Note:</strong> Full functionality requires Railway backend.</p>
-                        <p>You can now close this window and return to Telegram.</p>
-                        <script>setTimeout(() => window.close(), 5000);</script>
-                    </body>
-                </html>
-            `);
-            
-        } catch (fallbackError) {
-            console.error('Fallback OAuth error:', fallbackError);
-            return res.status(500).send(`
-                <html>
-                    <body style="font-family: Arial, sans-serif; text-align: center; margin-top: 50px;">
-                        <h2>❌ Authorization Failed</h2>
-                        <p>Unable to complete authorization.</p>
-                        <p>Please try again later or contact support.</p>
-                        <script>setTimeout(() => window.close(), 5000);</script>
-                    </body>
-                </html>
-            `);
-        }
-    }
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Cache-Control', 'no-store');
+
+  if (req.method === 'OPTIONS') return res.status(204).end();
+
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const { code, state, error: oauthError, error_description: oauthDesc } = req.query;
+
+  // ------------------------------------------------------------------
+  // 1. OAuth provider sent an error
+  // ------------------------------------------------------------------
+  if (oauthError) {
+    console.error('[oauth] Provider error:', oauthError, oauthDesc);
+    return res
+      .status(400)
+      .setHeader('Content-Type', 'text/html; charset=utf-8')
+      .send(errorPage('Authorization Failed', oauthDesc || oauthError));
+  }
+
+  // ------------------------------------------------------------------
+  // 2. Missing required params
+  // ------------------------------------------------------------------
+  if (!code) {
+    return res
+      .status(400)
+      .setHeader('Content-Type', 'text/html; charset=utf-8')
+      .send(errorPage('Invalid Request', 'Authorization code not received from Zoom.'));
+  }
+
+  if (!state || !isValidState(state)) {
+    console.warn('[oauth] Invalid or missing state param:', state);
+    return res
+      .status(400)
+      .setHeader('Content-Type', 'text/html; charset=utf-8')
+      .send(errorPage('Invalid Request', 'Missing or malformed state parameter.'));
+  }
+
+  // ------------------------------------------------------------------
+  // 3. Forward to Railway for token exchange + session storage
+  //    (Railway holds the oauth session map and database connection)
+  // ------------------------------------------------------------------
+  try {
+    await axios.get(`${RAILWAY_BACKEND}/auth/zoom/callback`, {
+      params: { code, state },
+      timeout: 10_000,
+    });
+
+    return res
+      .status(200)
+      .setHeader('Content-Type', 'text/html; charset=utf-8')
+      .send(successPage());
+  } catch (err) {
+    console.error('[oauth] Railway callback failed:', err.message);
+
+    // DO NOT attempt fallback token exchange here – there is no durable
+    // storage in Vercel serverless functions, so tokens would be silently lost.
+    // Surface a clear error instead.
+    return res
+      .status(502)
+      .setHeader('Content-Type', 'text/html; charset=utf-8')
+      .send(
+        errorPage(
+          'Backend Unavailable',
+          'The authorization backend is temporarily offline. Please try again in a moment.'
+        )
+      );
+  }
 }
