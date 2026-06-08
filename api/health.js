@@ -1,86 +1,68 @@
-// Vercel Serverless Function for Health Check & Metrics
-const axios = require('axios');
+// Vercel Serverless Function – Health & Readiness Probe
+// ESM-native; no require() calls.
+import axios from 'axios';
 
-const RAILWAY_BACKEND = process.env.RAILWAY_BACKEND || 'https://nebulosa-production.railway.app';
+const RAILWAY_BACKEND =
+  process.env.RAILWAY_BACKEND || 'https://nebulosa-production.railway.app';
+
+// Module-level start time – survives warm re-invocations on the same instance
+const MODULE_START_MS = Date.now();
+const VERSION = '1.0.0';
 
 export default async function handler(req, res) {
-    // Handle CORS
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
-    }
-    
-    if (req.method !== 'GET') {
-        return res.status(405).json({ error: 'Method not allowed' });
-    }
-    
-    const startTime = Date.now();
-    
-    try {
-        // Check Railway backend health
-        let railwayStatus = null;
-        let railwayLatency = 0;
-        
-        try {
-            const railwayStart = Date.now();
-            const railwayResponse = await axios.get(`${RAILWAY_BACKEND}/health`, {
-                timeout: 5000
-            });
-            railwayLatency = Date.now() - railwayStart;
-            railwayStatus = railwayResponse.data;
-        } catch (railwayError) {
-            console.error('Railway health check failed:', railwayError.message);
-            railwayStatus = { status: 'unhealthy', error: railwayError.message };
-        }
-        
-        // Vercel function metrics
-        const vercelStatus = {
-            status: 'healthy',
-            platform: 'vercel',
-            region: process.env.VERCEL_REGION || 'unknown',
-            timestamp: new Date().toISOString(),
-            responseTime: Date.now() - startTime,
-            environment: {
-                nodeVersion: process.version,
-                runtime: 'vercel-serverless',
-                deployment: process.env.VERCEL_URL || 'local'
-            }
-        };
-        
-        // Combined health status
-        const healthStatus = {
-            overall: railwayStatus?.status === 'healthy' ? 'healthy' : 'degraded',
-            vercel: vercelStatus,
-            railway: {
-                status: railwayStatus?.status || 'unknown',
-                url: RAILWAY_BACKEND,
-                latency: `${railwayLatency}ms`,
-                lastCheck: new Date().toISOString()
-            },
-            deployment: {
-                strategy: 'hybrid',
-                production: 'railway',
-                preview: 'vercel',
-                oauth: 'vercel->railway'
-            }
-        };
-        
-        // Return appropriate status code
-        const statusCode = healthStatus.overall === 'healthy' ? 200 : 503;
-        
-        return res.status(statusCode).json(healthStatus);
-        
-    } catch (error) {
-        console.error('Health check error:', error);
-        
-        return res.status(500).json({
-            status: 'error',
-            platform: 'vercel',
-            error: error.message,
-            timestamp: new Date().toISOString()
-        });
-    }
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
+
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+
+  const probeStart = Date.now();
+
+  // ------------------------------------------------------------------
+  // Probe the Railway backend
+  // ------------------------------------------------------------------
+  let railway = { status: 'unknown', latencyMs: null, error: null };
+  try {
+    const t0 = Date.now();
+    const { data } = await axios.get(`${RAILWAY_BACKEND}/health`, { timeout: 5000 });
+    railway = {
+      status: data?.status ?? 'ok',
+      latencyMs: Date.now() - t0,
+      uptime: data?.uptime ?? null,
+      error: null,
+    };
+  } catch (err) {
+    railway = {
+      status: 'unreachable',
+      latencyMs: null,
+      error: err.message,
+    };
+  }
+
+  const overall =
+    railway.status === 'healthy' || railway.status === 'ok' ? 'healthy' : 'degraded';
+
+  const body = {
+    overall,
+    version: VERSION,
+    platform: 'vercel',
+    node: process.version,
+    region: process.env.VERCEL_REGION ?? 'unknown',
+    deployment: process.env.VERCEL_URL ?? 'local',
+    instanceUptimeMs: Date.now() - MODULE_START_MS,
+    probeResponseTimeMs: Date.now() - probeStart,
+    timestamp: new Date().toISOString(),
+    railway: {
+      url: RAILWAY_BACKEND,
+      ...railway,
+    },
+    deployment_strategy: {
+      production: 'railway (long-running polling + oauth server)',
+      webhooks: 'vercel (serverless edge functions)',
+      oauth_callback: 'vercel → railway',
+    },
+  };
+
+  return res.status(overall === 'healthy' ? 200 : 503).json(body);
 }
