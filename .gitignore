@@ -38,3 +38,43 @@ Nebulosa
 # Runtime
 logs.json
 package-lock.json
+
+# ===== frisky-hygiene managed block (audit 2026-06-25) — edit only above this line =====
+node_modules/
+.pnpm-store/
+.yarn/
+dist/
+build/
+.next/
+.turbo/
+.output/
+out/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.venv-*/
+*.egg-info/
+.env
+.env.*
+.doppler.env
+!.env.example
+!.env.sample
+!.env.template
+!.env.*.example
+*.pem
+*.key
+service-account*.json
+serviceAccount*.json
+*.sqlite
+*.sqlite3
+*.db
+*.log
+logs.json
+.terraform/
+*.tfstate
+*.tfstate.*
+.idea/
+.vscode/
+.DS_Store
+# ===== end frisky-hygiene managed block =====
