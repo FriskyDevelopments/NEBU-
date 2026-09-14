@@ -62,6 +62,10 @@ export async function markSubscriptionPastDue(
 /**
  * Activates a user's subscription: updates the subscription record and the
  * user's plan/status in one go.
+ *
+ * Idempotent: if a subscription with the same provider_subscription_id
+ * already exists, the duplicate activation is skipped and the existing
+ * record is returned.
  */
 export async function activateUserSubscription(
   telegram_id: number,
@@ -71,6 +75,16 @@ export async function activateUserSubscription(
   renewal_date?: Date,
   provider?: string
 ) {
+  const existing = await prisma.subscription.findFirst({
+    where: { provider_subscription_id },
+  });
+  if (existing) {
+    console.warn(
+      `Subscription with provider_subscription_id ${provider_subscription_id} already exists — skipping duplicate activation`
+    );
+    return existing;
+  }
+
   await createSubscription({
     user_id,
     plan,

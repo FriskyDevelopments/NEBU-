@@ -2,6 +2,7 @@
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const axios = require('axios');
+const crypto = require('crypto');
 require('dotenv').config();
 
 console.log('🚂 Railway Bot Starting - Updated for OAuth Fix...');
@@ -37,6 +38,9 @@ console.log('✅ Bot initialized with modern polling configuration');
 // Zoom tokens storage (userId -> {accessToken, refreshToken, expiresAt})
 const userZoomTokens = new Map();
 
+// Pending OAuth flows (state -> userId), 10-minute TTL
+const oauthSessions = new Map();
+
 // Express app for health checks
 const app = express();
 const securityHeaders = require('./security-headers');
@@ -67,7 +71,7 @@ app.get('/health', (req, res) => {
 });
 
 // Zoom OAuth callback endpoint
-app.get('/auth/zoom/callback', (req, res) => {
+app.get('/auth/zoom/callback', async (req, res) => {
     const { code, state, error } = req.query;
 
     if (error) {
@@ -87,6 +91,20 @@ app.get('/auth/zoom/callback', (req, res) => {
             <p>Please try again with /zoomlogin in Telegram</p>
         `);
         return;
+    }
+
+    // Validate state against stored OAuth sessions (lookup-then-delete)
+    if (!state || !oauthSessions.has(state)) {
+        console.error('❌ Invalid or expired OAuth state');
+        return res.status(400).json({ error: 'Invalid or expired OAuth session' });
+    }
+    const { userId } = oauthSessions.get(state);
+    oauthSessions.delete(state);
+
+    // A missing Zoom configuration must not kill the process — return a 500 instead
+    if (!process.env.ZOOM_CLIENT_ID || !process.env.ZOOM_CLIENT_SECRET || !process.env.ZOOM_REDIRECT_URI) {
+        console.error('❌ Zoom OAuth environment not configured');
+        return res.status(500).json({ error: 'OAuth not configured' });
     }
 
     console.log('✅ OAuth callback received:', { code: code.substring(0, 10) + '...', state });
@@ -128,21 +146,6 @@ app.get('/auth/zoom/callback', (req, res) => {
             const clientSecret = process.env.ZOOM_CLIENT_SECRET;
             const redirectUri = process.env.ZOOM_REDIRECT_URI;
 
-            if (!clientId) {
-                console.error('❌ ZOOM_CLIENT_ID not found in environment variables');
-                process.exit(1);
-            }
-
-            if (!clientSecret) {
-                console.error('❌ ZOOM_CLIENT_SECRET not found in environment variables');
-                process.exit(1);
-            }
-
-            if (!redirectUri) {
-                console.error('❌ ZOOM_REDIRECT_URI not found in environment variables');
-                process.exit(1);
-            }
-
             console.log('🔄 Exchanging code for access token...');
 
             const params = new URLSearchParams();
@@ -160,14 +163,6 @@ app.get('/auth/zoom/callback', (req, res) => {
             });
 
             const { access_token, refresh_token, expires_in } = response.data;
-
-            // Parse state - handle both "user_<id>_<ts>" and plain "<id>" formats
-            let userId;
-            if (state.startsWith('user_')) {
-                userId = state.split('_')[1];
-            } else {
-                userId = state;
-            }
 
             // Store the tokens
             // TODO: Persist userZoomTokens to durable storage (e.g., database or file)
@@ -200,13 +195,6 @@ EN: Your account has been successfully linked. You can now use:
 
             // Notify user via Telegram on failure
             try {
-                let userId;
-                if (state.startsWith('user_')) {
-                    userId = state.split('_')[1];
-                } else {
-                    userId = state;
-                }
-
                 await bot.sendMessage(userId, `
 ❌ **OAuth Token Exchange Failed**
 
@@ -360,7 +348,16 @@ bot.onText(/\/zoomlogin/, (msg) => {
     }
 
     const encodedRedirectUri = encodeURIComponent(redirectUri);
-    const state = `user_${userId}_${Date.now()}`;
+    const state = crypto.randomBytes(32).toString('hex');
+
+    oauthSessions.set(state, userId);
+
+    // Expire the OAuth session after 10 minutes
+    setTimeout(() => {
+        if (oauthSessions.has(state)) {
+            oauthSessions.delete(state);
+        }
+    }, 10 * 60 * 1000);
 
     const oauthUrl = `https://zoom.us/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodedRedirectUri}&state=${state}&scope=meeting:read,meeting:write,user:read`;
 

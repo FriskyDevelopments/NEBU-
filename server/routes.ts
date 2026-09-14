@@ -98,10 +98,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).send("Missing authorization code or state");
       }
 
-      console.log(`Zoom OAuth callback received for user ${state}`);
-      
       // Import bot module to handle auth success
-      const { handleZoomAuthSuccess } = require('../bot.cjs');
+      const { handleZoomAuthSuccess, resolveOAuthState } = require('../bot.cjs');
+
+      // Resolve the Telegram user ID via the OAuth state map (CSRF protection).
+      // The raw state value must never be trusted as a user identifier.
+      const telegramUserId = resolveOAuthState(state as string);
+      if (!telegramUserId) {
+        return res.status(400).send("Invalid or expired OAuth state. Please run /zoomlogin again.");
+      }
+
+      console.log(`Zoom OAuth callback received for user ${telegramUserId}`);
       
       // Exchange code for access token
       const { getAccessToken } = require('../zoomAuth.js');
@@ -109,20 +116,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Store token in database
       await storage.createZoomToken({
-        telegramUserId: state as string,
+        telegramUserId: String(telegramUserId),
         accessToken: tokenData.access_token,
         refreshToken: tokenData.refresh_token,
         expiresAt: new Date(Date.now() + (tokenData.expires_in * 1000))
       });
 
       // Notify user via bot
-      await handleZoomAuthSuccess(parseInt(state as string), tokenData.access_token);
+      await handleZoomAuthSuccess(parseInt(String(telegramUserId)), tokenData.access_token);
       
       // Create bot log
       await storage.createBotLog({
         level: 'info',
         message: `Zoom OAuth completed successfully`,
-        telegramUserId: state as string,
+        telegramUserId: String(telegramUserId),
         command: 'zoom_auth_callback'
       });
 

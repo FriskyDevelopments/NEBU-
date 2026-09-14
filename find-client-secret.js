@@ -7,7 +7,7 @@ console.log('📋 TOKENS QUE VEO EN TU SCREENSHOT:');
 console.log('==================================');
 console.log('Client ID: vGVyI0IRv6si45iKO_qIw');
 console.log('Client Secret: ••••••••••  ← NECESITAMOS ESTE PARA OAUTH');
-console.log('Secret Token: 8yf0TomZRhywR46LqmpuPw  ← Este es para webhooks');
+console.log('Secret Token: REDACTED-rotate-in-Zoom-Marketplace  ← Este es para webhooks');
 console.log('');
 
 console.log('🔍 EXPLICACIÓN:');
@@ -39,7 +39,7 @@ console.log('===========================');
 console.log('1. Ve a la sección "App Credentials"');
 console.log('2. Encuentra "Client Secret" (diferente de "Secret Token")');
 console.log('3. Haz clic en "Copy" o el icono 👁️ para mostrar');
-console.log('4. Copia ese valor (será diferente de 8yf0TomZRhywR46LqmpuPw)');
+console.log('4. Copia ese valor (será diferente de REDACTED-rotate-in-Zoom-Marketplace)');
 console.log('');
 
 console.log('🎯 TAMBIÉN AGREGA EL REDIRECT URI:');

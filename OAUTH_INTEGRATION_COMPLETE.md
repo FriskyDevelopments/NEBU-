@@ -5,7 +5,7 @@
 ### 🔧 Environment Configuration
 - **Client ID**: vGVyI0IRv6si45iKO_qIw ✅
 - **Client Secret**: qL0UeGFWeQM2Csu1Z1G2J4RAZt4QGzi6 ✅  
-- **Secret Token**: 8yf0TomZRhywR46LqmpuPw ✅
+- **Secret Token**: REDACTED-rotate-in-Zoom-Marketplace ✅
 - **Redirect URI**: https://pupfr.github.io/Nebulosa/zoom-callback.html ✅
 
 ### 🌐 GitHub Pages Deployment

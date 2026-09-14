@@ -165,17 +165,12 @@
                 <p>Please try the /zoomlogin command again in Telegram.</p>
             `;
         } else if (code && state) {
-            // Send notification via webhook
-            fetch('https://api.telegram.org/bot8113796108:AAHvZqXdqTRzor5ep7tV0OCDWzQO_8TjBUg/sendMessage', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    chat_id: state,
-                    text: `✅ OAuth successful!\n🔗 Code received: ${code.substring(0, 20)}...\n📱 Return to Telegram to continue.`
-                })
-            });
+            // Only confirm to the user; the bot completes the code exchange itself
+            document.querySelector('.container').innerHTML = `
+                <h1>🎉 Connection Successful!</h1>
+                <p class="success">✅ Authorization received from Zoom</p>
+                <p><strong>Return to Telegram to continue.</strong> The bot will complete the connection automatically.</p>
+            `;
 
             console.log('OAuth callback processed:', { code, state });
         } else {

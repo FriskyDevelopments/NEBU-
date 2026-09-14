@@ -18,6 +18,13 @@ class CompleteRailwayBot {
         // Validate environment
         this.validateEnvironment();
 
+        this.WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET;
+        if (!this.WEBHOOK_SECRET) {
+            this.WEBHOOK_SECRET = crypto.randomBytes(32).toString('hex');
+            console.warn('⚠️ TELEGRAM_WEBHOOK_SECRET not set – generated a random webhook secret for this boot.');
+            console.warn('   Configure TELEGRAM_WEBHOOK_SECRET or Telegram updates will be rejected after restart.');
+        }
+
         // Initialize bot and express
         this.bot = new TelegramBot(this.BOT_TOKEN, { webHook: false });
         this.userSessions = new Map();
@@ -52,6 +59,9 @@ class CompleteRailwayBot {
         // TELEGRAM WEBHOOK
         // ======================
         this.app.post('/webhook', (req, res) => {
+            if (!this.isValidWebhookSecret(req.headers['x-telegram-bot-api-secret-token'])) {
+                return res.sendStatus(401);
+            }
             console.log('📨 Telegram webhook received');
             this.bot.processUpdate(req.body);
             res.sendStatus(200);
@@ -329,12 +339,19 @@ Hello ${username}! Your Zoom account is now connected.
         }
     }
 
+    isValidWebhookSecret(headerValue) {
+        if (!this.WEBHOOK_SECRET || typeof headerValue !== 'string') return false;
+        const expected = Buffer.from(this.WEBHOOK_SECRET);
+        const received = Buffer.from(headerValue);
+        return expected.length === received.length && crypto.timingSafeEqual(expected, received);
+    }
+
     async setWebhook() {
         try {
             await this.bot.deleteWebHook();
             console.log('🗑️ Existing webhook removed');
 
-            const result = await this.bot.setWebHook(this.WEBHOOK_URL);
+            const result = await this.bot.setWebHook(this.WEBHOOK_URL, { secret_token: this.WEBHOOK_SECRET });
             if (result) {
                 console.log('✅ Webhook set successfully:', this.WEBHOOK_URL);
             }

@@ -1,5 +1,6 @@
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
+const crypto = require('crypto');
 const { 
   getAccessToken, 
   refreshAccessToken, 
@@ -63,6 +64,10 @@ let userLanguages = new Map();
 
 // Zoom tokens storage (userId -> {accessToken, refreshToken, expiresAt})
 let userZoomTokens = new Map();
+
+// OAuth state sessions for Zoom login (CSRF protection): state -> { telegramUserId, timestamp }
+let oauthStateSessions = new Map();
+const OAUTH_STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 // Violation tracking and multipin management
 let violationCounts = new Map(); // userId -> count
@@ -1222,12 +1227,30 @@ async function shortenUrl(longUrl) {
   }
 }
 
+function createOAuthState(userId) {
+  const state = crypto.randomBytes(32).toString('hex');
+  oauthStateSessions.set(state, { telegramUserId: userId, timestamp: Date.now() });
+  return state;
+}
+
+function resolveOAuthState(state) {
+  const session = oauthStateSessions.get(state);
+  if (!session) {
+    return null;
+  }
+  oauthStateSessions.delete(state);
+  if (Date.now() - session.timestamp > OAUTH_STATE_TTL_MS) {
+    return null;
+  }
+  return session.telegramUserId;
+}
+
 async function generateAuthUrl(userId) {
   const redirectUri = process.env.ZOOM_REDIRECT_URI || 'https://pupfr.github.io/Nebulosa/zoom-callback.html';
   const clientId = (process.env.ZOOM_USER_CLIENT_ID || 'K3t8Sd3rSZOSKfkyMftDXg').trim();
   
   // Create the OAuth URL
-  const authUrl = `https://zoom.us/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${userId}`;
+  const authUrl = `https://zoom.us/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${createOAuthState(userId)}`;
   
   console.log('🔍 OAuth URL Generation:');
   console.log('Client ID:', clientId);
@@ -3833,4 +3856,4 @@ bot.onText(/\/publish(.*)/, async (msg, match) => {
   await logToChannel(`User ${userId} published sticker draft ${draftId}`, userId);
 });
 
-module.exports = { bot, handleZoomAuthSuccess, botMetrics, activeSessions };
+module.exports = { bot, handleZoomAuthSuccess, resolveOAuthState, botMetrics, activeSessions };
