@@ -56,9 +56,9 @@ Your ultra-cheap bot hosting is **OPERATIONAL** across **3 platforms**:
 
 ## 🎨 **RENDER - BACKUP (FREE)**
 - **Status**: ✅ Configuration ready
-- **Files**: `render.yaml`, `admin-panel.js`, `backup-bot.js`
+- **Files**: `render.yaml`, `backup-bot.js` (admin-panel.js REMOVED — Telegram-only admin)
 - **Services**: Admin panel + backup bot + static docs
-- **URL**: `https://nebulosa-admin.onrender.com`
+- **URL**: `removed — admin is Telegram-only (OWNER_ID)`
 
 ### **Features**:
 - ✅ FREE tier (750 hours/month)

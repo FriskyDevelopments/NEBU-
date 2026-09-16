@@ -47,8 +47,18 @@ bot.on('message', (msg) => {
   console.log(`📨 Message received: ${msg.text} from user ${msg.from.id} (@${msg.from.username})`);
 });
 
-// Admin user IDs (you can configure these in environment or hardcode)
+// Admin user IDs (configure via env; no hardcoded owners)
 const ADMIN_IDS = [process.env.ADMIN_USER_ID].filter(Boolean).map(id => parseInt(id));
+
+// Owner gate: single source of truth is OWNER_ID (numeric Telegram user id).
+// Number() + integer check — NaN / 'undefined' / empty values fail closed.
+const OWNER_ID = Number(process.env.OWNER_ID);
+const ownerConfigured = Number.isInteger(OWNER_ID) && OWNER_ID > 0;
+if (!ownerConfigured) {
+  const msg = 'OWNER_ID env is not a valid numeric Telegram user id — admin commands are DISABLED.';
+  if (process.env.NODE_ENV === 'production') console.error('🚨 ' + msg);
+  else console.warn('⚠️ ' + msg);
+}
 
 // Active sessions storage
 let activeSessions = new Map();
@@ -266,9 +276,9 @@ function getString(userId, path) {
 
 // Helper functions
 function isAdmin(userId) {
-  // User 7695459242 is the owner and has full admin access
-  const OWNER_ID = 7695459242;
-  return userId === OWNER_ID || ADMIN_IDS.includes(userId);
+  // Owner comes only from OWNER_ID env; missing/malformed values fail closed.
+  if (!ownerConfigured) return false;
+  return Number(userId) === OWNER_ID || ADMIN_IDS.includes(Number(userId));
 }
 
 function trackCommand(command, userId) {

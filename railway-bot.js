@@ -231,8 +231,8 @@ class RailwayTelegramBot {
 2. Verify webhook configuration  
 3. Ensure BOT_TOKEN is set
 
-*Admin Panel*: https://nebulosa-admin.onrender.com
 *Documentation*: https://nebulosa-docs.onrender.com
+*Admin*: Telegram owner commands (/status /who /logout /shutdown)
             `;
             
             await this.bot.sendMessage(chatId, helpMessage, { parse_mode: 'Markdown' });

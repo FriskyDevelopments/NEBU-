@@ -186,7 +186,7 @@ bot.onText(/\/help/, async (msg) => {
 
 *For full bot features*, use the main bot instance.
 
-💡 *Admin Panel*: https://nebulosa-admin.onrender.com
+💡 *Admin*: Telegram owner commands (/status /who /logout /shutdown)
 📊 *Documentation*: https://nebulosa-docs.onrender.com
     `;
     

@@ -91,7 +91,7 @@ Let me create the additional configs for Render and PlanetScale:
 ### **✅ Files Created**:
 - `render.yaml` - Render service configuration
 - `planetscale-schema.sql` - Database schema for free tier
-- `admin-panel.js` - Render admin dashboard
+- `admin-panel.js` - REMOVED (Telegram-only admin)
 - `backup-bot.js` - Render backup bot instance  
 - `deploy-triple-platform.sh` - Automated deployment script
 
