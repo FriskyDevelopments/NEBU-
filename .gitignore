@@ -1,12 +1,11 @@
-.env
-.env.local
+.env*
+!.env.example
 logs.json
 node_modules/
 .DS_Store
 
 npm-debug.log*
 
-.env
 .vercel
 
 # Python

@@ -134,7 +134,7 @@ async function removeParticipant(name) {
     for (const row of rows) {
       const nameEl = _queryFirst(ZoomSelectors.PARTICIPANT_ROW_NAME, row);
       const rowName = nameEl ? nameEl.textContent.trim() : row.textContent.trim();
-      if (rowName.toLowerCase().includes(name.toLowerCase())) { targetRow = row; break; }
+      if (rowName.toLowerCase().trim() === name.toLowerCase().trim()) { targetRow = row; break; }
     }
 
     if (!targetRow) return 'USER_NOT_FOUND';
@@ -153,15 +153,32 @@ async function removeParticipant(name) {
     if (!removeItem) { document.body.click(); return 'REMOVE_OPTION_NOT_FOUND'; }
     removeItem.click();
 
-    setTimeout(() => {
-      const dialogs = _queryAll(['[role="dialog"]']);
-      for (const dialog of dialogs) {
-        const btns = _queryAll(['button'], dialog);
-        for (const btn of btns) {
-          if ((btn.textContent || '').toLowerCase().trim() === 'remove') btn.click();
-        }
-      }
-    }, 500);
+    try {
+      await new Promise((resolve, reject) => {
+        const startTime = Date.now();
+        const checkInterval = window.setInterval(() => {
+          const dialogs = _queryAll(['[role="dialog"]']);
+          for (const dialog of dialogs) {
+            const btns = _queryAll(['button'], dialog);
+            for (const btn of btns) {
+              if ((btn.textContent || '').toLowerCase().trim() === 'remove') {
+                window.clearInterval(checkInterval);
+                btn.click();
+                resolve();
+                return;
+              }
+            }
+          }
+          if (Date.now() - startTime > 3000) {
+            window.clearInterval(checkInterval);
+            reject(new Error('Timeout waiting for remove confirmation button'));
+          }
+        }, 100);
+      });
+    } catch (err) {
+      console.error('[Nebulosa:ZoomAdapter] Failed to find remove confirmation:', err);
+      return 'CONFIRMATION_NOT_FOUND';
+    }
 
     return 'REMOVED';
   } catch (err) {
@@ -180,7 +197,7 @@ async function muteParticipant(name) {
     for (const row of rows) {
       const nameEl = _queryFirst(ZoomSelectors.PARTICIPANT_ROW_NAME, row);
       const rowName = nameEl ? nameEl.textContent.trim() : row.textContent.trim();
-      if (rowName.toLowerCase().includes(name.toLowerCase())) { targetRow = row; break; }
+      if (rowName.toLowerCase().trim() === name.toLowerCase().trim()) { targetRow = row; break; }
     }
 
     if (!targetRow) return 'USER_NOT_FOUND';

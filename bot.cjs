@@ -1,5 +1,6 @@
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
+const crypto = require('crypto');
 const { 
   getAccessToken, 
   refreshAccessToken, 
@@ -46,8 +47,18 @@ bot.on('message', (msg) => {
   console.log(`📨 Message received: ${msg.text} from user ${msg.from.id} (@${msg.from.username})`);
 });
 
-// Admin user IDs (you can configure these in environment or hardcode)
+// Admin user IDs (configure via env; no hardcoded owners)
 const ADMIN_IDS = [process.env.ADMIN_USER_ID].filter(Boolean).map(id => parseInt(id));
+
+// Owner gate: single source of truth is OWNER_ID (numeric Telegram user id).
+// Number() + integer check — NaN / 'undefined' / empty values fail closed.
+const OWNER_ID = Number(process.env.OWNER_ID);
+const ownerConfigured = Number.isInteger(OWNER_ID) && OWNER_ID > 0;
+if (!ownerConfigured) {
+  const msg = 'OWNER_ID env is not a valid numeric Telegram user id — admin commands are DISABLED.';
+  if (process.env.NODE_ENV === 'production') console.error('🚨 ' + msg);
+  else console.warn('⚠️ ' + msg);
+}
 
 // Active sessions storage
 let activeSessions = new Map();
@@ -63,6 +74,10 @@ let userLanguages = new Map();
 
 // Zoom tokens storage (userId -> {accessToken, refreshToken, expiresAt})
 let userZoomTokens = new Map();
+
+// OAuth state sessions for Zoom login (CSRF protection): state -> { telegramUserId, timestamp }
+let oauthStateSessions = new Map();
+const OAUTH_STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 // Violation tracking and multipin management
 let violationCounts = new Map(); // userId -> count
@@ -261,9 +276,9 @@ function getString(userId, path) {
 
 // Helper functions
 function isAdmin(userId) {
-  // User 7695459242 is the owner and has full admin access
-  const OWNER_ID = 7695459242;
-  return userId === OWNER_ID || ADMIN_IDS.includes(userId);
+  // Owner comes only from OWNER_ID env; missing/malformed values fail closed.
+  if (!ownerConfigured) return false;
+  return Number(userId) === OWNER_ID || ADMIN_IDS.includes(Number(userId));
 }
 
 function trackCommand(command, userId) {
@@ -1222,12 +1237,30 @@ async function shortenUrl(longUrl) {
   }
 }
 
+function createOAuthState(userId) {
+  const state = crypto.randomBytes(32).toString('hex');
+  oauthStateSessions.set(state, { telegramUserId: userId, timestamp: Date.now() });
+  return state;
+}
+
+function resolveOAuthState(state) {
+  const session = oauthStateSessions.get(state);
+  if (!session) {
+    return null;
+  }
+  oauthStateSessions.delete(state);
+  if (Date.now() - session.timestamp > OAUTH_STATE_TTL_MS) {
+    return null;
+  }
+  return session.telegramUserId;
+}
+
 async function generateAuthUrl(userId) {
   const redirectUri = process.env.ZOOM_REDIRECT_URI || 'https://pupfr.github.io/Nebulosa/zoom-callback.html';
   const clientId = (process.env.ZOOM_USER_CLIENT_ID || 'K3t8Sd3rSZOSKfkyMftDXg').trim();
   
   // Create the OAuth URL
-  const authUrl = `https://zoom.us/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${userId}`;
+  const authUrl = `https://zoom.us/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${createOAuthState(userId)}`;
   
   console.log('🔍 OAuth URL Generation:');
   console.log('Client ID:', clientId);
@@ -3833,4 +3866,4 @@ bot.onText(/\/publish(.*)/, async (msg, match) => {
   await logToChannel(`User ${userId} published sticker draft ${draftId}`, userId);
 });
 
-module.exports = { bot, handleZoomAuthSuccess, botMetrics, activeSessions };
+module.exports = { bot, handleZoomAuthSuccess, resolveOAuthState, botMetrics, activeSessions };

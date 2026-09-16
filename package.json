@@ -2,10 +2,10 @@
   "name": "stixmagic",
   "version": "1.0.0",
   "description": "Stix Magic – Telegram-first sticker creation platform",
-  "main": "stixmagic-bot.js",
+  "main": "railway-complete-bot.js",
   "scripts": {
-    "start": "node stixmagic-bot.js",
-    "dev": "node stixmagic-bot.js",
+    "start": "node railway-complete-bot.js",
+    "dev": "node railway-complete-bot.js",
     "deploy": "railway up",
     "client:dev": "vite",
     "client:build": "vite build",

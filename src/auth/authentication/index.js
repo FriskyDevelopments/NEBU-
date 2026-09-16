@@ -96,9 +96,17 @@ async function verifyApiKey(rawKey, storedHash) {
     return bcrypt.compare(rawKey, storedHash);
   }
 
-  // Modern SHA-256 hashes
+  // Modern SHA-256 hashes - use timing-safe comparison
   const hash = crypto.createHash('sha256').update(rawKey).digest('hex');
-  return hash === storedHash;
+  const hashBuffer = Buffer.from(hash, 'hex');
+  const storedHashBuffer = Buffer.from(storedHash, 'hex');
+
+  // Check lengths match before comparing
+  if (hashBuffer.length !== storedHashBuffer.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(hashBuffer, storedHashBuffer);
 }
 
 /**

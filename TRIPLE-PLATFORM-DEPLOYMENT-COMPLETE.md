@@ -56,9 +56,9 @@ Your ultra-cheap bot hosting is **OPERATIONAL** across **3 platforms**:
 
 ## 🎨 **RENDER - BACKUP (FREE)**
 - **Status**: ✅ Configuration ready
-- **Files**: `render.yaml`, `admin-panel.js`, `backup-bot.js`
+- **Files**: `render.yaml`, `backup-bot.js` (admin-panel.js REMOVED — Telegram-only admin)
 - **Services**: Admin panel + backup bot + static docs
-- **URL**: `https://nebulosa-admin.onrender.com`
+- **URL**: `removed — admin is Telegram-only (OWNER_ID)`
 
 ### **Features**:
 - ✅ FREE tier (750 hours/month)
@@ -116,7 +116,7 @@ Your ultra-cheap bot hosting is **OPERATIONAL** across **3 platforms**:
 ```bash
 # ✅ DEPLOYMENT SUCCESSFUL!
 # 🚂 Railway bot is LIVE at nebulosa-production.railway.app
-# 🤖 Bot verified: La_NUBE_bot (ID: 8113796108)
+# 🤖 Bot verified: La_NUBE_bot (ID: YOUR_BOT_ID)
 # 🏥 Health checks: PASSING
 # � Dependencies: MODERNIZED (zero warnings)
 

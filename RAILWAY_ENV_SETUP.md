@@ -8,14 +8,14 @@ Find your project: "Nebulosa" or "LA NUBE BOT"
 In your Railway project, go to **Variables** tab and add these:
 
 ```bash
-BOT_TOKEN=8113796108:AAHEK9UdLgsR46-ctyLaivtxIp6kWV1zr74
+BOT_TOKEN=YOUR_BOT_TOKEN
 AUTHORIZED_GROUP_ID=-1002726059191
 ZOOM_USER_CLIENT_ID=vGVyI0IRv6si45iKO_qIw
 ZOOM_USER_CLIENT_SECRET=qL0UeGFWeQM2Csu1Z1G2J4RAZt4QGzi6
 ZOOM_CLIENT_ID=vGVyI0IRv6si45iKO_qIw
 ZOOM_CLIENT_SECRET=qL0UeGFWeQM2Csu1Z1G2J4RAZt4QGzi6
 ZOOM_REDIRECT_URI=https://pupfr.github.io/Nebulosa/zoom-callback.html
-ZOOM_SECRET_TOKEN=8yf0TomZRhywR46LqmpuPw
+ZOOM_SECRET_TOKEN=REDACTED-rotate-in-Zoom-Marketplace
 PORT=3000
 NODE_ENV=production
 ```
@@ -29,7 +29,7 @@ The error means Railway can't access the bot token. Ensure:
 
 1. ✅ **BOT_TOKEN** is set in Railway Variables (not in .env file)
 2. ✅ **No spaces** around the token value
-3. ✅ **Correct token format**: `8113796108:AAHEK9UdLgsR46-ctyLaivtxIp6kWV1zr74`
+3. ✅ **Correct token format**: `YOUR_BOT_TOKEN`
 4. ✅ **Railway deployment** is using the correct start command: `node production-bot.js`
 
 ## Quick Fix Commands (Railway CLI)
@@ -43,7 +43,7 @@ railway login
 railway link
 
 # Set variables
-railway variables set BOT_TOKEN=8113796108:AAHEK9UdLgsR46-ctyLaivtxIp6kWV1zr74
+railway variables set BOT_TOKEN=YOUR_BOT_TOKEN
 railway variables set PORT=3000
 railway variables set NODE_ENV=production
 

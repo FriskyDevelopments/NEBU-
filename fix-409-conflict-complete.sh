@@ -47,7 +47,7 @@ else
     # Create localhost .env if it doesn't exist
     cat > .env.localhost << 'EOF'
 # Localhost OAuth Configuration
-BOT_TOKEN=8113796108:AAHEK9UdLgsR46-ctyLaivtxIp6kWV1zr74
+BOT_TOKEN=YOUR_BOT_TOKEN
 ZOOM_CLIENT_ID=vGVyI0IRv6si45iKO_qIw
 ZOOM_CLIENT_SECRET=your_zoom_client_secret
 ZOOM_REDIRECT_URI=http://localhost:3000/auth/zoom/callback

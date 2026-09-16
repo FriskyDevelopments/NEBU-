@@ -4,9 +4,16 @@ echo "🚀 HYBRID DEPLOYMENT: RAILWAY + VERCEL"
 echo "====================================="
 echo ""
 
-# Tokens
-RAILWAY_TOKEN="f116a0ab-8170-432d-a69a-f94f23d4a726"
-VERCEL_TOKEN="nIQ94iBPU8jZBmvlMqg4xmz8"
+# Check tokens
+if [ -z "$RAILWAY_TOKEN" ]; then
+    echo "❌ Error: RAILWAY_TOKEN environment variable is not set."
+    exit 1
+fi
+
+if [ -z "$VERCEL_TOKEN" ]; then
+    echo "❌ Error: VERCEL_TOKEN environment variable is not set."
+    exit 1
+fi
 
 echo "🔐 Tokens configured:"
 echo "🚂 Railway: ${RAILWAY_TOKEN:0:8}..."

@@ -7,35 +7,9 @@ import { registerNebulosaRoutes } from "./nebulosa/routes";
 export async function registerRoutes(app: Express): Promise<Server> {
   registerNebulosaRoutes(app);
 
-  // Dashboard API routes
-  app.get("/api/bot/status", async (req, res) => {
-    try {
-      const metrics = await storage.getBotMetrics();
-      const activeUsers = await storage.getActiveTelegramUsersCount();
-      
-      res.json({
-        status: "online",
-        metrics: metrics || {
-          activeUsers,
-          commandsToday: 0,
-          totalCommands: 0,
-          uptime: "0d 0h 0m"
-        }
-      });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch bot status" });
-    }
-  });
-
-  app.get("/api/bot/logs", async (req, res) => {
-    try {
-      const limit = parseInt(req.query.limit as string) || 50;
-      const logs = await storage.getBotLogs(limit);
-      res.json(logs);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch logs" });
-    }
-  });
+  // Dashboard API routes — web admin panel removed (Telegram-only admin).
+  // Bot telemetry ingest (POST /api/bot/logs, POST /api/bot/metrics) is kept for
+  // the bot's own bookkeeping; the unauthenticated admin read surfaces are gone.
 
   app.post("/api/bot/logs", async (req, res) => {
     try {
@@ -57,38 +31,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/environment/status", async (req, res) => {
-    const envVars = {
-      BOT_TOKEN: !!process.env.BOT_TOKEN,
-      LOG_CHANNEL_ID: !!process.env.LOG_CHANNEL_ID,
-      ZOOM_CLIENT_ID: !!process.env.ZOOM_CLIENT_ID,
-      ZOOM_CLIENT_SECRET: !!process.env.ZOOM_CLIENT_SECRET,
-      ZOOM_REDIRECT_URI: !!process.env.ZOOM_REDIRECT_URI,
-    };
-    
-    res.json(envVars);
-  });
-
-  // Debug route for checking Zoom credentials format
-  app.get("/api/zoom/debug", async (req, res) => {
-    const clientId = process.env.ZOOM_USER_CLIENT_ID || process.env.ZOOM_CLIENT_ID;
-    const clientSecret = process.env.ZOOM_USER_CLIENT_SECRET || process.env.ZOOM_CLIENT_SECRET;
-    
-    res.json({
-      clientId: {
-        exists: !!clientId,
-        length: clientId?.length || 0,
-        hasPipe: clientId?.includes('|') || false,
-        firstChars: clientId?.substring(0, 15) || 'N/A',
-        isValidFormat: clientId && clientId.length >= 20 && !clientId.includes('|')
-      },
-      clientSecret: {
-        exists: !!clientSecret,
-        length: clientSecret?.length || 0
-      }
-    });
-  });
-
   // Zoom OAuth callback route
   app.get("/zoom/callback", async (req, res) => {
     try {
@@ -98,10 +40,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).send("Missing authorization code or state");
       }
 
-      console.log(`Zoom OAuth callback received for user ${state}`);
-      
       // Import bot module to handle auth success
-      const { handleZoomAuthSuccess } = require('../bot.cjs');
+      const { handleZoomAuthSuccess, resolveOAuthState } = require('../bot.cjs');
+
+      // Resolve the Telegram user ID via the OAuth state map (CSRF protection).
+      // The raw state value must never be trusted as a user identifier.
+      const telegramUserId = resolveOAuthState(state as string);
+      if (!telegramUserId) {
+        return res.status(400).send("Invalid or expired OAuth state. Please run /zoomlogin again.");
+      }
+
+      console.log(`Zoom OAuth callback received for user ${telegramUserId}`);
       
       // Exchange code for access token
       const { getAccessToken } = require('../zoomAuth.js');
@@ -109,20 +58,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Store token in database
       await storage.createZoomToken({
-        telegramUserId: state as string,
+        telegramUserId: String(telegramUserId),
         accessToken: tokenData.access_token,
         refreshToken: tokenData.refresh_token,
         expiresAt: new Date(Date.now() + (tokenData.expires_in * 1000))
       });
 
       // Notify user via bot
-      await handleZoomAuthSuccess(parseInt(state as string), tokenData.access_token);
+      await handleZoomAuthSuccess(parseInt(String(telegramUserId)), tokenData.access_token);
       
       // Create bot log
       await storage.createBotLog({
         level: 'info',
         message: `Zoom OAuth completed successfully`,
-        telegramUserId: state as string,
+        telegramUserId: String(telegramUserId),
         command: 'zoom_auth_callback'
       });
 

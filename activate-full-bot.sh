@@ -30,7 +30,7 @@ echo "--------------------------------------------"
 
 cat > .env.full << 'EOF'
 # Full-Featured Bot Configuration
-BOT_TOKEN=8113796108:AAHEK9UdLgsR46-ctyLaivtxIp6kWV1zr74
+BOT_TOKEN=YOUR_BOT_TOKEN
 AUTHORIZED_GROUP_ID=-1002726059191
 ZOOM_USER_CLIENT_ID=vGVyI0IRv6si45iKO_qIw
 ZOOM_USER_CLIENT_SECRET=qL0UeGFWeQM2Csu1Z1G2J4RAZt4QGzi6

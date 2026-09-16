@@ -56,7 +56,7 @@ console.log('');
 console.log('📄 RECOMMENDED .env FILE:');
 console.log('');
 console.log('# Copy this into a .env file in your project root');
-console.log('BOT_TOKEN=8113796108:AAHvZqXdqTRzor5ep7tV0OCDWzQO_8TjBUg');
+console.log('BOT_TOKEN=YOUR_BOT_TOKEN');
 console.log('ZOOM_CLIENT_ID=vGVyI0IRv6si45iKO_qIw');
 console.log('ZOOM_CLIENT_SECRET=Gb9JmLsI1brv4bPdAPB9CSknQV4GiFB');
 console.log('ZOOM_REDIRECT_URI=https://pupfr.github.io/Nebulosa/zoom-callback.html');

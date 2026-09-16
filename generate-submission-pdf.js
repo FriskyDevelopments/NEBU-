@@ -303,12 +303,12 @@ function getSubmissionHtml(submissionPath) {
     htmlContent = htmlContent
         // Replace checkmarks with styled versions
         .replace(/✅/g, '<span class="checkbox">✅</span>')
-        // Add page breaks before major sections
-        .replace(/<h2>/g, '<div class="page-break"></div><h2>')
-        // Style status indicators
-        .replace(/PASSED/g, '<span class="status-badge status-success">PASSED</span>')
-        .replace(/ENTERPRISE-GRADE/g, '<span class="status-badge status-success">ENTERPRISE-GRADE</span>')
-        .replace(/ZERO ISSUES/g, '<span class="status-badge status-success">ZERO ISSUES</span>');
+        // Add page breaks before major sections (but not inside code blocks)
+        .replace(/(<h2>)(?![^<]*<\/code>)/g, '<div class="page-break"></div>$1')
+        // Style status indicators (using word boundaries to avoid matching inside code)
+        .replace(/\bPASSED\b/g, '<span class="status-badge status-success">PASSED</span>')
+        .replace(/\bENTERPRISE-GRADE\b/g, '<span class="status-badge status-success">ENTERPRISE-GRADE</span>')
+        .replace(/\bZERO ISSUES\b/g, '<span class="status-badge status-success">ZERO ISSUES</span>');
 
     // Create the complete HTML document
     return `
@@ -348,14 +348,15 @@ function getSubmissionHtml(submissionPath) {
     `;
 }
 
-async function renderPdf(html, outputPath, options = {}) {
-    const browser = await puppeteer.launch({
+async function renderPdf(html, outputPath, options = {}, browser = null) {
+    const shouldCloseBrowser = !browser;
+    const activeBrowser = browser || await puppeteer.launch({
         headless: 'new',
         args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
 
     try {
-        const page = await browser.newPage();
+        const page = await activeBrowser.newPage();
         await page.setContent(html, { waitUntil: 'networkidle0' });
 
         const defaultOptions = {
@@ -370,10 +371,13 @@ async function renderPdf(html, outputPath, options = {}) {
         console.log(`📄 File saved as: ${outputPath}`);
         console.log(`📊 File size: ${(fs.statSync(outputPath).size / 1024 / 1024).toFixed(2)} MB`);
     } finally {
-        await browser.close();
+        if (shouldCloseBrowser) {
+            await activeBrowser.close();
+        }
     }
 }
 async function generatePDF() {
+    let browser = null;
     try {
         console.log('🚀 Starting PDF generation for Zoom submission package...');
 
@@ -381,6 +385,12 @@ async function generatePDF() {
         const fullHtml = getSubmissionHtml(submissionPath);
 
         console.log('🎨 HTML content prepared with professional styling');
+
+        // Launch browser once for both PDFs
+        browser = await puppeteer.launch({
+            headless: 'new',
+            args: ['--no-sandbox', '--disable-setuid-sandbox']
+        });
 
         // Generate PDF with professional settings
         const pdfPath = path.join(__dirname, 'ZOOM-BETA-PUBLISHER-SUBMISSION.pdf');
@@ -402,7 +412,7 @@ async function generatePDF() {
                     <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span> | Generated: ${new Date().toLocaleDateString()} | github.com/PupFr/Nebulosa</span>
                 </div>
             `
-        });
+        }, browser);
 
         // Also generate a compact version
         console.log('📋 Generating compact version...');
@@ -415,7 +425,7 @@ async function generatePDF() {
                 left: '10mm'
             },
             scale: 0.8 // Slightly smaller for more content per page
-        });
+        }, browser);
 
         // Generate summary
         console.log('\n🎉 PDF GENERATION COMPLETE!');
@@ -437,6 +447,10 @@ async function generatePDF() {
         console.error('❌ PDF generation failed:', error.message);
         console.error('Stack trace:', error.stack);
         return { success: false, error: error.message };
+    } finally {
+        if (browser) {
+            await browser.close();
+        }
     }
 }
 

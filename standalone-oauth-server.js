@@ -10,6 +10,17 @@ const ZOOM_CLIENT_ID = process.env.ZOOM_CLIENT_ID;
 const ZOOM_CLIENT_SECRET = process.env.ZOOM_CLIENT_SECRET;
 const BOT_TOKEN = process.env.BOT_TOKEN;
 
+// Fail-fast validation
+if (!ZOOM_CLIENT_ID) {
+    console.error('❌ FATAL: ZOOM_CLIENT_ID environment variable is not set');
+    process.exit(1);
+}
+
+if (!ZOOM_CLIENT_SECRET) {
+    console.error('❌ FATAL: ZOOM_CLIENT_SECRET environment variable is not set');
+    process.exit(1);
+}
+
 app.get('/auth/zoom/callback', async (req, res) => {
     const { code, state } = req.query;
 

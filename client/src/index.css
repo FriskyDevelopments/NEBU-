@@ -114,3 +114,41 @@
     animation: xiPulseSignal 1.2s ease-in-out infinite;
   }
 }
+
+
+@keyframes xi-pulse-active {
+  0%,
+  100% {
+    opacity: 0.88;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.045);
+  }
+}
+
+@keyframes xi-pulse-signal {
+  0%,
+  100% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+
+@layer utilities {
+  .xi-pulse-active {
+    animation: xi-pulse-active 1.8s ease-in-out infinite;
+  }
+
+  .xi-pulse-signal {
+    animation: xi-pulse-signal 1.2s ease-in-out infinite;
+  }
+}

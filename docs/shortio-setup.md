@@ -23,7 +23,7 @@ SHORTIO_API_KEY=your_actual_api_key_here
 
 **Without Short.io:**
 ```
-https://zoom.us/oauth/authorize?response_type=code&client_id=K3t8Sd3rSZOSKfkyMftDXg&redirect_uri=https%3A%2F%2Fpupfrisky.com%2Fzoom-callback&state=7695459242
+https://zoom.us/oauth/authorize?response_type=code&client_id=K3t8Sd3rSZOSKfkyMftDXg&redirect_uri=https%3A%2F%2Fpupfrisky.com%2Fzoom-callback&state=YOUR_TELEGRAM_USER_ID
 ```
 
 **With Short.io:**

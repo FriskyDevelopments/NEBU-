@@ -63,7 +63,22 @@ function enable() {
         // Just acknowledging presence. Logic to parse participants can be added here.
       }
     });
-    _observer.observe(document.body, { childList: true, subtree: true });
+
+    if (document.body) {
+      _observer.observe(document.body, { childList: true, subtree: true });
+    } else {
+      const startObserver = () => {
+        if (document.body) {
+          _observer.observe(document.body, { childList: true, subtree: true });
+        }
+      };
+
+      if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        startObserver();
+      } else {
+        document.addEventListener('DOMContentLoaded', startObserver);
+      }
+    }
   }
 }
 
@@ -99,7 +114,13 @@ async function admit(name) {
  */
 async function admitAll() {
   dbg('admitAll');
-  return ZoomAdapter.admitAll();
+  if (typeof ZoomAdapter.admitAll === 'function') {
+    return ZoomAdapter.admitAll();
+  } else if (typeof ZoomAdapter.admit === 'function') {
+    return ZoomAdapter.admit();
+  } else {
+    throw new Error('ZoomAdapter.admitAll and ZoomAdapter.admit are not available');
+  }
 }
 
 // CommonJS + browser-global dual export

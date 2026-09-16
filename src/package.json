@@ -8,7 +8,7 @@
     "dev": "node --watch api/server.js",
     "test": "node --experimental-vm-modules node_modules/.bin/jest --runInBand",
     "lint": "eslint . --ext .js",
-    "db:generate": "prisma generate",
+    "db:generate": "prisma generate --schema=database/schema/schema.prisma",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "worker:start": "node workers/index.js"

@@ -161,19 +161,12 @@
                 <p>Por favor, intenta el comando /zoomlogin nuevamente en Telegram.</p>
             `;
         } else if (code && state) {
-            // Enviar notificación via webhook
-            fetch('https://api.telegram.org/bot8113796108:AAHvZqXdqTRzor5ep7tV0OCDWzQO_8TjBUg/sendMessage', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    chat_id: state,
-                    text: `✅ OAuth exitoso!\n🔗 Código recibido: ${code.substring(0, 20)}...\n📱 Regresa a Telegram para continuar.`
-                })
-            });
-
-            console.log('OAuth callback processed:', { code, state });
+            // La conexión se completa del lado del servidor; solo confirmamos localmente.
+            document.querySelector('.container').innerHTML = `
+                <h1>✅ OAuth Exitoso</h1>
+                <p>Tu autorización de Zoom fue recibida.</p>
+                <p>Regresa a Telegram para continuar. El bot completará la conexión automáticamente.</p>
+            `;
         } else {
             document.querySelector('.container').innerHTML = `
                 <h1>❌ Error de OAuth</h1>
@@ -182,38 +175,6 @@
             `;
         }
     </script>
-</body>
-
-</html>
-
-if (error) {
-document.querySelector('.container').innerHTML = `
-<h1>❌ Error de Autorización</h1>
-<p>Error: ${error}</p>
-<p>Por favor, intenta el comando /zoomlogin nuevamente en Telegram.</p>
-`;
-} else if (code && state) {
-// Enviar notificación via webhook
-fetch('https://api.telegram.org/bot8113796108:AAHEK9UdLgsR46-ctyLaivtxIp6kWV1zr74/sendMessage', {
-method: 'POST',
-headers: {
-'Content-Type': 'application/json',
-},
-body: JSON.stringify({
-chat_id: state,
-text: `✅ OAuth exitoso!\n🔗 Código recibido: ${code.substring(0, 20)}...\n📱 Regresa a Telegram para continuar.`
-})
-});
-
-console.log('OAuth callback processed:', { code, state });
-} else {
-document.querySelector('.container').innerHTML = `
-<h1>❌ Error de OAuth</h1>
-<p>No se recibió el código de autorización de Zoom.</p>
-<p>Por favor, intenta el comando /zoomlogin nuevamente en Telegram.</p>
-`;
-}
-</script>
 </body>
 
 </html>

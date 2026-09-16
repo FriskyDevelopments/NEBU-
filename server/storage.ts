@@ -93,7 +93,7 @@ export class MemStorage implements IStorage {
     const activeMeeting: MeetingInsights = {
       id: this.currentId++,
       meetingId: '12345678901',
-      hostUserId: '7695459242',
+      hostUserId: '0000000000',
       topic: 'LA NUBE BOT Test Session',
       status: 'active',
       currentParticipants: 8,
@@ -112,7 +112,7 @@ export class MemStorage implements IStorage {
     const endedMeeting: MeetingInsights = {
       id: this.currentId++,
       meetingId: '98765432109',
-      hostUserId: '7695459242',
+      hostUserId: '0000000000',
       topic: 'Weekly Team Sync',
       status: 'ended',
       currentParticipants: 0,
@@ -131,7 +131,7 @@ export class MemStorage implements IStorage {
     const recentMeeting: MeetingInsights = {
       id: this.currentId++,
       meetingId: '11223344556',
-      hostUserId: '7695459242',
+      hostUserId: '0000000000',
       topic: 'Client Presentation',
       status: 'ended',
       currentParticipants: 0,

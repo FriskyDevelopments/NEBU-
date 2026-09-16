@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const { verifyToken, verifyApiKey } = require('../../auth/authentication');
+const { verifyToken, verifyApiKey, hashApiKey } = require('../../auth/authentication');
 const { UserRepository } = require('../../database/repositories/user.repository');
 const { withContext } = require('../../core/logger');
 
@@ -52,7 +52,6 @@ async function authenticateWithApiKey(req, res, next, rawKey) {
   const db = repo.db;
 
   // 1. Try fast deterministic lookup (O(1)) for modern SHA-256 hashes
-  const { hashApiKey } = require('../../auth/authentication');
   const hash = await hashApiKey(rawKey);
 
   let apiKeyRecord = await db.apiKey.findUnique({
@@ -93,7 +92,7 @@ async function authenticateWithApiKey(req, res, next, rawKey) {
     db.apiKey.update({
       where: { id: apiKeyRecord.id },
       data: { lastUsedAt: new Date() },
-    }).catch(() => {});
+    }).catch((err) => log.error('Failed to update apiKey.lastUsedAt', { apiKeyId: apiKeyRecord.id, error: err }));
 
     req.user = {
       id: apiKeyRecord.user.id,

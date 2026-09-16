@@ -44,6 +44,7 @@ async function handleDraftCallback(bot, query) {
             await handleSaveDraft(bot, query, chatId, userId, draftId);
             break;
         default:
+            console.warn('[DraftHandler] Unexpected draft action:', action);
             break;
     }
 }
@@ -87,13 +88,14 @@ async function handleRetryDraft(bot, query, chatId, userId, draftId) {
 
     // Re-process the original source image if available (Phase 1: reuse fileId)
     try {
-        recordCreation(userId);
         const newDraft = createDraft(userId, {
             fileId: original.fileId,
             fileUniqueId: original.fileUniqueId,
             sourceMessageId: original.sourceMessageId,
             chatId,
         });
+
+        recordCreation(userId);
 
         const reviewMsg = await bot.sendPhoto(
             chatId,

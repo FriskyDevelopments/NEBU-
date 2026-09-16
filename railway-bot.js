@@ -2,6 +2,7 @@
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const axios = require('axios');
+const crypto = require('crypto');
 require('dotenv').config();
 
 class RailwayTelegramBot {
@@ -14,6 +15,13 @@ class RailwayTelegramBot {
         if (!this.BOT_TOKEN) {
             console.error('❌ BOT_TOKEN not found in environment variables');
             process.exit(1);
+        }
+
+        this.WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET;
+        if (!this.WEBHOOK_SECRET) {
+            this.WEBHOOK_SECRET = crypto.randomBytes(32).toString('hex');
+            console.warn('⚠️ TELEGRAM_WEBHOOK_SECRET not set – generated a random webhook secret for this boot.');
+            console.warn('   Configure TELEGRAM_WEBHOOK_SECRET or Telegram updates will be rejected after restart.');
         }
         
         // Initialize bot in webhook mode (required for Railway)
@@ -36,6 +44,9 @@ class RailwayTelegramBot {
         
         // Webhook endpoint for Telegram
         this.app.post('/webhook', (req, res) => {
+            if (!this.isValidWebhookSecret(req.headers['x-telegram-bot-api-secret-token'])) {
+                return res.sendStatus(401);
+            }
             console.log('📨 Webhook received:', req.body);
             this.bot.processUpdate(req.body);
             res.sendStatus(200);
@@ -71,6 +82,13 @@ class RailwayTelegramBot {
         });
     }
     
+    isValidWebhookSecret(headerValue) {
+        if (!this.WEBHOOK_SECRET || typeof headerValue !== 'string') return false;
+        const expected = Buffer.from(this.WEBHOOK_SECRET);
+        const received = Buffer.from(headerValue);
+        return expected.length === received.length && crypto.timingSafeEqual(expected, received);
+    }
+
     async setWebhook() {
         try {
             // Remove existing webhook
@@ -78,7 +96,7 @@ class RailwayTelegramBot {
             console.log('🗑️ Existing webhook removed');
             
             // Set new webhook
-            const result = await this.bot.setWebHook(this.WEBHOOK_URL);
+            const result = await this.bot.setWebHook(this.WEBHOOK_URL, { secret_token: this.WEBHOOK_SECRET });
             if (result) {
                 console.log('✅ Webhook set successfully:', this.WEBHOOK_URL);
             } else {
@@ -213,8 +231,8 @@ class RailwayTelegramBot {
 2. Verify webhook configuration  
 3. Ensure BOT_TOKEN is set
 
-*Admin Panel*: https://nebulosa-admin.onrender.com
 *Documentation*: https://nebulosa-docs.onrender.com
+*Admin*: Telegram owner commands (/status /who /logout /shutdown)
             `;
             
             await this.bot.sendMessage(chatId, helpMessage, { parse_mode: 'Markdown' });

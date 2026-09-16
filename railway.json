@@ -5,6 +5,7 @@
   },
   "deploy": {
     "startCommand": "node railway-complete-bot.js",
-    "restartPolicyType": "ALWAYS"
+    "restartPolicyType": "ALWAYS",
+    "healthcheckPath": "/health"
   }
 }

@@ -69,7 +69,7 @@
 ### Environment Variables (Validated)
 
 ```
-BOT_TOKEN=8113796108:AAGiB-h_0tvgm3snV52hc3xagvVnGL87ZcU
+BOT_TOKEN=YOUR_BOT_TOKEN
 ZOOM_CLIENT_ID=vGVyI0IRv6si45iKO_qIw
 ZOOM_CLIENT_SECRET=qL0UeGFWeQM2Csu1Z1G2J4RAZt4QGzi6
 ZOOM_REDIRECT_URI=https://nebulosa-production.railway.app/oauth/callback

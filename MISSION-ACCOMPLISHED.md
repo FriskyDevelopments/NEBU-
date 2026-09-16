@@ -42,7 +42,7 @@ https://zoom.us/oauth/authorize?response_type=code&client_id=vGVyI0IRv6si45iKO_q
 
 ## 📊 **Technical Summary:**
 - **Platform**: Localhost development environment
-- **Bot Token**: 8113796108:AAH... ✅ Working
+- **Bot Token**: YOUR_BOT_TOKEN ✅ Working
 - **OAuth Client**: vGVyI0IRv6si45iKO_qIw ✅ Configured
 - **Callback URI**: http://localhost:3000/auth/zoom/callback ✅ Added to Zoom
 - **Dependencies**: All modernized, zero warnings ✅

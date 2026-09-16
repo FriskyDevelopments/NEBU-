@@ -8,7 +8,7 @@ echo ""
 
 echo "🔧 WHAT WAS FIXED:"
 echo "   ❌ 404 Not Found → ✅ Correct bot token restored"
-echo "   ❌ Placeholder token → ✅ Real token: 8113796108:AAH..."
+echo "   ❌ Placeholder token → ✅ Real token: YOUR_BOT_TOKEN"
 echo "   ❌ Wrong redirect URI → ✅ Localhost callback active"
 echo ""
 
@@ -32,7 +32,7 @@ else
 fi
 
 # Test bot token
-echo "   ✅ Bot token: 8113796108:AAH... (correct)"
+echo "   ✅ Bot token: YOUR_BOT_TOKEN (correct)"
 echo "   ✅ Redirect URI: http://localhost:3000/auth/zoom/callback"
 echo ""
 

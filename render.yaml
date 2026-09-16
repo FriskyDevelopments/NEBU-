@@ -1,5 +1,5 @@
 # 🎨 Render Configuration
-# Static site build for docs and admin panel
+# Static site build for docs
 
 services:
   - type: web
@@ -16,23 +16,6 @@ services:
         value: production
       - key: DOCS_MODE
         value: static
-
-  - type: web  
-    name: nebulosa-admin
-    env: node
-    buildCommand: npm install
-    startCommand: node admin-panel.js
-    plan: free
-    region: oregon
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: ADMIN_PORT
-        value: 10000
-      - key: DATABASE_URL
-        fromDatabase:
-          name: nebulosa-db
-          property: connectionString
 
   - type: web
     name: nebulosa-backup-bot

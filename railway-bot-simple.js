@@ -2,6 +2,7 @@
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const axios = require('axios');
+const crypto = require('crypto');
 require('dotenv').config();
 
 console.log('🚂 Railway Bot Starting - Updated for OAuth Fix...');
@@ -37,6 +38,9 @@ console.log('✅ Bot initialized with modern polling configuration');
 // Zoom tokens storage (userId -> {accessToken, refreshToken, expiresAt})
 const userZoomTokens = new Map();
 
+// Pending OAuth flows (state -> userId), 10-minute TTL
+const oauthSessions = new Map();
+
 // Express app for health checks
 const app = express();
 const securityHeaders = require('./security-headers');
@@ -67,7 +71,7 @@ app.get('/health', (req, res) => {
 });
 
 // Zoom OAuth callback endpoint
-app.get('/auth/zoom/callback', (req, res) => {
+app.get('/auth/zoom/callback', async (req, res) => {
     const { code, state, error } = req.query;
 
     if (error) {
@@ -87,6 +91,20 @@ app.get('/auth/zoom/callback', (req, res) => {
             <p>Please try again with /zoomlogin in Telegram</p>
         `);
         return;
+    }
+
+    // Validate state against stored OAuth sessions (lookup-then-delete)
+    if (!state || !oauthSessions.has(state)) {
+        console.error('❌ Invalid or expired OAuth state');
+        return res.status(400).json({ error: 'Invalid or expired OAuth session' });
+    }
+    const { userId } = oauthSessions.get(state);
+    oauthSessions.delete(state);
+
+    // A missing Zoom configuration must not kill the process — return a 500 instead
+    if (!process.env.ZOOM_CLIENT_ID || !process.env.ZOOM_CLIENT_SECRET || !process.env.ZOOM_REDIRECT_URI) {
+        console.error('❌ Zoom OAuth environment not configured');
+        return res.status(500).json({ error: 'OAuth not configured' });
     }
 
     console.log('✅ OAuth callback received:', { code: code.substring(0, 10) + '...', state });
@@ -124,9 +142,9 @@ app.get('/auth/zoom/callback', (req, res) => {
     // Exchange authorization code for access token
     const exchangeToken = async () => {
         try {
-            const clientId = process.env.ZOOM_CLIENT_ID || 'vGVyI0IRv6si45iKO_qIw';
+            const clientId = process.env.ZOOM_CLIENT_ID;
             const clientSecret = process.env.ZOOM_CLIENT_SECRET;
-            const redirectUri = process.env.ZOOM_REDIRECT_URI || 'https://nebulosa-production.railway.app/auth/zoom/callback';
+            const redirectUri = process.env.ZOOM_REDIRECT_URI;
 
             if (!clientSecret) {
                 console.error('❌ ZOOM_CLIENT_SECRET not found in environment variables');
@@ -150,9 +168,10 @@ app.get('/auth/zoom/callback', (req, res) => {
             });
 
             const { access_token, refresh_token, expires_in } = response.data;
-            const userId = state.split('_')[1];
 
             // Store the tokens
+            // TODO: Persist userZoomTokens to durable storage (e.g., database or file)
+            // for production use. Current in-memory Map will be lost on restart.
             userZoomTokens.set(userId, {
                 accessToken: access_token,
                 refreshToken: refresh_token,
@@ -178,11 +197,26 @@ EN: Your account has been successfully linked. You can now use:
 
         } catch (err) {
             console.error('❌ Token exchange failed:', err.response?.data || err.message);
+
+            // Notify user via Telegram on failure
+            try {
+                await bot.sendMessage(userId, `
+❌ **OAuth Token Exchange Failed**
+
+There was an error completing the Zoom OAuth authorization.
+
+**Error:** ${err.response?.data?.message || err.message}
+
+Please try again with \`/zoomlogin\`
+                `, { parse_mode: 'Markdown' });
+            } catch (notifyErr) {
+                console.error('❌ Failed to notify user of token exchange failure:', notifyErr.message);
+            }
         }
     };
 
-    // Execute exchange (non-blocking)
-    exchangeToken();
+    // Execute exchange and wait for completion
+    await exchangeToken();
 });
 
 // Start Express server
@@ -303,24 +337,47 @@ bot.onText(/\/zoomlogin/, (msg) => {
     const userId = msg.from.id;
 
     // Generate OAuth URL - Use Railway callback for production
-    const clientId = process.env.ZOOM_CLIENT_ID || 'vGVyI0IRv6si45iKO_qIw';
-    const redirectUri = encodeURIComponent('https://nebulosa-production.railway.app/auth/zoom/callback');
-    const state = `user_${userId}_${Date.now()}`;
+    const clientId = process.env.ZOOM_CLIENT_ID;
+    const redirectUri = process.env.ZOOM_REDIRECT_URI;
 
-    const oauthUrl = `https://zoom.us/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${redirectUri}&state=${state}&scope=meeting:read,meeting:write,user:read`;
+    if (!clientId) {
+        bot.sendMessage(chatId, '❌ Error: ZOOM_CLIENT_ID not configured');
+        console.error('❌ ZOOM_CLIENT_ID not found in environment variables');
+        return;
+    }
+
+    if (!redirectUri) {
+        bot.sendMessage(chatId, '❌ Error: ZOOM_REDIRECT_URI not configured');
+        console.error('❌ ZOOM_REDIRECT_URI not found in environment variables');
+        return;
+    }
+
+    const encodedRedirectUri = encodeURIComponent(redirectUri);
+    const state = crypto.randomBytes(32).toString('hex');
+
+    oauthSessions.set(state, userId);
+
+    // Expire the OAuth session after 10 minutes
+    setTimeout(() => {
+        if (oauthSessions.has(state)) {
+            oauthSessions.delete(state);
+        }
+    }, 10 * 60 * 1000);
+
+    const oauthUrl = `https://zoom.us/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodedRedirectUri}&state=${state}&scope=meeting:read,meeting:write,user:read`;
 
     const loginMessage = `
 🔐 **Autorización Zoom OAuth**
 
 ⚠️ **PASO 1: Configurar Zoom App**
 Primero necesitas agregar esta URI a tu Zoom app:
-\`https://nebulosa-production.railway.app/auth/zoom/callback\`
+\`${redirectUri}\`
 
 📝 **Configuración Zoom:**
 1. Ve a: https://marketplace.zoom.us/develop/apps
 2. Busca tu app con Client ID: \`${clientId}\`
 3. En la sección **OAuth**, agrega esta Redirect URI:
-   \`https://nebulosa-production.railway.app/auth/zoom/callback\`
+   \`${redirectUri}\`
 4. Guarda los cambios
 
 ⚡ **PASO 2: Autorizar**

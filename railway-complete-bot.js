@@ -18,6 +18,35 @@ class CompleteRailwayBot {
         // Validate environment
         this.validateEnvironment();
 
+        this.WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET;
+        if (!this.WEBHOOK_SECRET) {
+            this.WEBHOOK_SECRET = crypto.randomBytes(32).toString('hex');
+            console.warn('⚠️ TELEGRAM_WEBHOOK_SECRET not set – generated a random webhook secret for this boot.');
+            console.warn('   Configure TELEGRAM_WEBHOOK_SECRET or Telegram updates will be rejected after restart.');
+        }
+
+        // ======================
+        // ADMIN CONFIG (Telegram-only admin — no web panel)
+        // ======================
+        this.OWNER_ID = Number(process.env.OWNER_ID);
+        this.ownerConfigured = Number.isInteger(this.OWNER_ID) && this.OWNER_ID > 0;
+        this.CONTROL_CHAT_ID = process.env.CONTROL_CHAT_ID ? Number(process.env.CONTROL_CHAT_ID) : null;
+        this.controlChatConfigured = Number.isInteger(this.CONTROL_CHAT_ID);
+
+        if (!this.ownerConfigured) {
+            const msg = 'OWNER_ID is not set to a valid numeric Telegram user id — admin commands (/status /who /logout /shutdown) are DISABLED.';
+            if (process.env.NODE_ENV === 'production') {
+                console.error('🚨 ' + msg);
+            } else {
+                console.warn('⚠️ ' + msg);
+            }
+        } else {
+            console.log('🔐 Admin gate: OWNER_ID configured');
+            console.log(this.controlChatConfigured
+                ? `🔐 Control chat: ${this.CONTROL_CHAT_ID}`
+                : '🔐 Control chat: not set (owner user id only)');
+        }
+
         // Initialize bot and express
         this.bot = new TelegramBot(this.BOT_TOKEN, { webHook: false });
         this.userSessions = new Map();
@@ -52,6 +81,9 @@ class CompleteRailwayBot {
         // TELEGRAM WEBHOOK
         // ======================
         this.app.post('/webhook', (req, res) => {
+            if (!this.isValidWebhookSecret(req.headers['x-telegram-bot-api-secret-token'])) {
+                return res.sendStatus(401);
+            }
             console.log('📨 Telegram webhook received');
             this.bot.processUpdate(req.body);
             res.sendStatus(200);
@@ -190,6 +222,26 @@ class CompleteRailwayBot {
     }
 
     setupTelegramBot() {
+        // Chat migration: Telegram moves a group to a supergroup and sends the new id.
+        // If the control chat migrated, follow it and tell the owner how to persist it.
+        this.bot.on('message', (msg) => {
+            const migratedFrom = msg.migrate_from_chat_id;
+            const migratedTo = msg.migrate_to_chat_id;
+            if (!migratedFrom && !migratedTo) return;
+            if (this.isControlChat(migratedFrom) || this.isControlChat(msg.chat.id)) {
+                const oldId = this.CONTROL_CHAT_ID;
+                this.CONTROL_CHAT_ID = Number(migratedTo || msg.chat.id);
+                this.controlChatConfigured = Number.isInteger(this.CONTROL_CHAT_ID);
+                console.log(`🔀 Control chat migrated: ${oldId} -> ${this.CONTROL_CHAT_ID}`);
+                if (this.ownerConfigured) {
+                    this.bot.sendMessage(this.OWNER_ID,
+                        `🔀 Control chat migrated.\nOld: ${oldId}\nNew: ${this.CONTROL_CHAT_ID}\n` +
+                        `Set CONTROL_CHAT_ID=${this.CONTROL_CHAT_ID} in the Railway env to persist across restarts.`
+                    ).catch(err => console.error('Failed to notify owner of chat migration:', err.message));
+                }
+            }
+        });
+
         // Welcome command
         this.bot.onText(/\/start/, (msg) => {
             const chatId = msg.chat.id;
@@ -211,12 +263,8 @@ Hello ${username}! I'm your advanced Zoom meeting management assistant.
 📱 Quick Start:
 1. Use /zoomlogin to connect your Zoom account
 2. Use /createroom to create meetings with auto-multipin
-3. Use /status to check system status
 
-🔐 Security:
-• Enterprise-grade OAuth security
-• SonarQube validated code (A-rating)
-• Zero security vulnerabilities
+🔐 Admin: /status /who /logout /shutdown (owner only, no web panel)
 
 Ready to start? Use /zoomlogin to connect your Zoom account!`;
 
@@ -276,27 +324,92 @@ ${authUrl}
             }
         });
 
-        // Status command
+        // Status command — owner or control chat only
         this.bot.onText(/\/status/, (msg) => {
+            if (!this.isAdminContext(msg)) return this.refuseAdmin(msg, '/status');
             const chatId = msg.chat.id;
+            const zoomLinked = this.userSessions.has(chatId);
 
             const statusMessage = `📊 NEBULOSA BOT Status
 
-🤖 Bot Status: ✅ Running on Railway
+🤖 Bot: ✅ Running (Railway)
 🔐 OAuth Server: ✅ Active
-🔗 Callback URL: ${this.ZOOM_REDIRECT_URI}
-📡 Webhook: ✅ Configured
-⏰ Uptime: ${Math.floor(process.uptime())} seconds
-
-🛡️ Security Status:
-✅ SonarQube: PASSED (A-rating)
-✅ Vulnerabilities: 0
-✅ Environment: Secure
-
-Ready for Zoom integration!`;
+⏰ Uptime: ${Math.floor(process.uptime())}s
+🔑 Zoom (this chat): ${zoomLinked ? '✅ linked' : '❌ no token — /zoomlogin'}
+📨 OAuth pending: ${this.oauthSessions.size}
+👤 Caller: ${msg.from.id}${this.isOwnerUser(msg.from.id) ? ' (owner)' : ''}
+💬 Chat: ${chatId}${this.isControlChat(chatId) ? ' (control)' : ''}`;
 
             this.bot.sendMessage(chatId, statusMessage);
         });
+
+        // Who command — owner or control chat only. No tokens, no secrets.
+        this.bot.onText(/\/who/, (msg) => {
+            if (!this.isAdminContext(msg)) return this.refuseAdmin(msg, '/who');
+            const chatId = msg.chat.id;
+
+            const whoMessage = `👤 /who
+• caller user id: ${msg.from.id}${this.isOwnerUser(msg.from.id) ? ' (OWNER)' : ''}
+• chat id: ${chatId}${this.isControlChat(chatId) ? ' (CONTROL)' : ''}
+• OWNER_ID env: ${this.ownerConfigured ? '✅ set' : '❌ MISSING — admin commands disabled'}
+• CONTROL_CHAT_ID env: ${this.controlChatConfigured ? '✅ ' + this.CONTROL_CHAT_ID : 'not set (owner user id only)'}
+• Zoom sessions stored: ${this.userSessions.size}
+• Admin model: Telegram-only (owner + optional control chat)`;
+
+            this.bot.sendMessage(chatId, whoMessage);
+        });
+
+        // Logout command — owner or control chat only. Drops the stored Zoom session.
+        this.bot.onText(/\/logout/, (msg) => {
+            if (!this.isAdminContext(msg)) return this.refuseAdmin(msg, '/logout');
+            const chatId = msg.chat.id;
+
+            if (this.userSessions.has(chatId)) {
+                this.userSessions.delete(chatId);
+                console.log(`🔑 Zoom session unlinked for chat ${chatId} by user ${msg.from.id}`);
+                this.bot.sendMessage(chatId, '🔑 Zoom session unlinked. Use /zoomlogin to reconnect.');
+            } else {
+                this.bot.sendMessage(chatId, 'ℹ️ No Zoom session stored for this chat.');
+            }
+        });
+
+        // Shutdown command — OWNER user id only, even inside the control chat.
+        this.bot.onText(/\/shutdown/, async (msg) => {
+            if (!this.isOwnerUser(msg.from && msg.from.id)) return this.refuseAdmin(msg, '/shutdown');
+            const chatId = msg.chat.id;
+            console.log(`🛑 Shutdown requested by owner (user ${msg.from.id})`);
+            try {
+                await this.bot.sendMessage(chatId, '🛑 Shutdown requested by owner. Stopping now.');
+            } catch (error) {
+                console.error('Failed to send shutdown confirmation:', error.message);
+            }
+            setTimeout(() => process.exit(0), 500);
+        });
+    }
+
+    // ======================
+    // ADMIN GATE HELPERS
+    // ======================
+    // Single gate: numeric comparison via Number() + ===. Number(undefined)/Number('undefined')
+    // are NaN and never match, so a missing/malformed OWNER_ID fails closed.
+    isOwnerUser(userId) {
+        return this.ownerConfigured && Number(userId) === this.OWNER_ID;
+    }
+
+    isControlChat(chatId) {
+        return this.controlChatConfigured && Number(chatId) === this.CONTROL_CHAT_ID;
+    }
+
+    // Admin commands are accepted from the owner (any chat) or from the control chat.
+    isAdminContext(msg) {
+        const fromId = msg.from && msg.from.id;
+        return this.isOwnerUser(fromId) || this.isControlChat(msg.chat.id);
+    }
+
+    // Silent ignore + audit log: replying would leak which commands exist.
+    refuseAdmin(msg, command) {
+        const fromId = msg.from && msg.from.id;
+        console.log(`⛔ ${command} refused: user ${fromId}, chat ${msg.chat.id}, ownerConfigured=${this.ownerConfigured}`);
     }
 
     async handleZoomAuthSuccess(chatId, username, tokenData) {
@@ -329,12 +442,19 @@ Hello ${username}! Your Zoom account is now connected.
         }
     }
 
+    isValidWebhookSecret(headerValue) {
+        if (!this.WEBHOOK_SECRET || typeof headerValue !== 'string') return false;
+        const expected = Buffer.from(this.WEBHOOK_SECRET);
+        const received = Buffer.from(headerValue);
+        return expected.length === received.length && crypto.timingSafeEqual(expected, received);
+    }
+
     async setWebhook() {
         try {
             await this.bot.deleteWebHook();
             console.log('🗑️ Existing webhook removed');
 
-            const result = await this.bot.setWebHook(this.WEBHOOK_URL);
+            const result = await this.bot.setWebHook(this.WEBHOOK_URL, { secret_token: this.WEBHOOK_SECRET });
             if (result) {
                 console.log('✅ Webhook set successfully:', this.WEBHOOK_URL);
             }

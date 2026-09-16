@@ -1,5 +1,6 @@
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
+const crypto = require('crypto');
 require('dotenv').config();
 
 class ZoomTelegramBot {
@@ -7,6 +8,7 @@ class ZoomTelegramBot {
         this.bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
         this.userSessions = new Map(); // Store OAuth tokens
         this.initializedUsers = new Set(); // First interaction tracking
+        this.oauthSessions = new Map(); // Pending OAuth flows (state -> userId)
         this.adminUsers = new Set([
             // Add admin user IDs here
             // 123456789, 987654321
@@ -75,7 +77,16 @@ class ZoomTelegramBot {
     generateOAuthUrl(userId) {
         const clientId = process.env.ZOOM_CLIENT_ID;
         const redirectUri = process.env.ZOOM_REDIRECT_URI;
-        const state = userId.toString();
+        const state = crypto.randomBytes(32).toString('hex');
+
+        this.oauthSessions.set(state, userId);
+
+        // Expire the OAuth session after 10 minutes
+        setTimeout(() => {
+            if (this.oauthSessions.has(state)) {
+                this.oauthSessions.delete(state);
+            }
+        }, 10 * 60 * 1000);
         
         return `https://zoom.us/oauth/authorize?` +
                `response_type=code&` +
@@ -757,6 +768,15 @@ app.get('/auth/zoom/callback', async (req, res) => {
     }
     
     try {
+        // Validate state against stored OAuth sessions (lookup-then-delete)
+        if (!botInstance || !botInstance.oauthSessions.has(state)) {
+            console.error('Invalid or expired OAuth state');
+            res.status(400).send('Invalid or expired authorization session. Please try /zoomlogin again.');
+            return;
+        }
+        const { userId } = botInstance.oauthSessions.get(state);
+        botInstance.oauthSessions.delete(state);
+        
         // Exchange code for tokens
         const tokenResponse = await axios.post('https://zoom.us/oauth/token', {
             grant_type: 'authorization_code',
@@ -770,7 +790,6 @@ app.get('/auth/zoom/callback', async (req, res) => {
         });
         
         const tokens = tokenResponse.data;
-        const userId = parseInt(state);
         
         // Store tokens in bot
         if (botInstance) {

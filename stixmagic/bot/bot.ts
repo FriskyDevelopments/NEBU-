@@ -12,6 +12,15 @@ const bot = new Bot(process.env.TELEGRAM_BOT_TOKEN);
 
 const API_BASE_URL = process.env.APP_BASE_URL ?? "http://localhost:3000";
 
+// Shared secret the API requires on /api/users/* and /api/subscription/* routes
+const BOT_SECRET = process.env.BOT_API_SHARED_SECRET;
+if (!BOT_SECRET) {
+  console.warn(
+    "BOT_API_SHARED_SECRET is not set — API calls to /api/users/* and /api/subscription/* will be rejected"
+  );
+}
+const botSecretHeaders = { "X-Bot-Secret": BOT_SECRET ?? "" };
+
 // ─── /start ──────────────────────────────────────────────────────────────────
 
 bot.command("start", async (ctx) => {
@@ -24,10 +33,14 @@ bot.command("start", async (ctx) => {
   }
 
   try {
-    const response = await axios.post(`${API_BASE_URL}/api/users/create-or-get`, {
-      telegram_id: telegramId,
-      telegram_username: telegramUsername,
-    });
+    const response = await axios.post(
+      `${API_BASE_URL}/api/users/create-or-get`,
+      {
+        telegram_id: telegramId,
+        telegram_username: telegramUsername,
+      },
+      { headers: botSecretHeaders }
+    );
 
     const user = response.data as { plan: string; subscription_status: string };
     const planName = getPlanDisplayName(user.plan);
@@ -150,11 +163,15 @@ bot.on("message:successful_payment", async (ctx) => {
   }
 
   try {
-    await axios.post(`${API_BASE_URL}/api/subscription/stars-payment`, {
-      telegram_id: telegramId,
-      plan,
-      telegram_payment_charge_id: chargeId,
-    });
+    await axios.post(
+      `${API_BASE_URL}/api/subscription/stars-payment`,
+      {
+        telegram_id: telegramId,
+        plan,
+        telegram_payment_charge_id: chargeId,
+      },
+      { headers: botSecretHeaders }
+    );
 
     const planName = getPlanDisplayName(plan);
     await ctx.reply(
@@ -175,7 +192,8 @@ async function getCheckoutUrl(telegramId: number, plan: string): Promise<string>
   try {
     const response = await axios.post(
       `${API_BASE_URL}/api/subscription/create-checkout`,
-      { telegram_id: telegramId, plan }
+      { telegram_id: telegramId, plan },
+      { headers: botSecretHeaders }
     );
     return (response.data as { url: string }).url;
   } catch (error) {

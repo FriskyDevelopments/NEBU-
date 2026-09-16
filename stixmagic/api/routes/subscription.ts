@@ -1,4 +1,4 @@
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import { PrismaClient } from "@prisma/client";
 import { getUserByTelegramId, updateUserPlan } from "../../services/userService.js";
 import {
@@ -9,6 +9,7 @@ import {
   createCheckoutSession,
   constructWebhookEvent,
 } from "../../utils/stripe.js";
+import { verifyStarsCharge } from "../../utils/telegram.js";
 import Stripe from "stripe";
 
 const prisma = new PrismaClient();
@@ -16,10 +17,31 @@ const prisma = new PrismaClient();
 const router = Router();
 
 /**
+ * Middleware that requires the X-Bot-Secret header to match
+ * BOT_API_SHARED_SECRET. Only the bot (bot/bot.ts) knows this secret —
+ * Stripe webhooks are authenticated separately via stripe-signature.
+ */
+function requireBotSecret(req: Request, res: Response, next: NextFunction) {
+  const secret = process.env.BOT_API_SHARED_SECRET;
+  if (!secret) {
+    console.error("BOT_API_SHARED_SECRET is not configured");
+    res.status(500).json({ error: "Server misconfigured" });
+    return;
+  }
+
+  if (req.headers["x-bot-secret"] !== secret) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  next();
+}
+
+/**
  * POST /api/subscription/create-checkout
  * Creates a Stripe Checkout Session and returns the URL.
  */
-router.post("/create-checkout", async (req: Request, res: Response) => {
+router.post("/create-checkout", requireBotSecret, async (req: Request, res: Response) => {
   const { telegram_id, plan } = req.body as {
     telegram_id?: number;
     plan?: string;
@@ -51,7 +73,7 @@ router.post("/create-checkout", async (req: Request, res: Response) => {
  *
  * Body: { telegram_id, plan, telegram_payment_charge_id }
  */
-router.post("/stars-payment", async (req: Request, res: Response) => {
+router.post("/stars-payment", requireBotSecret, async (req: Request, res: Response) => {
   const { telegram_id, plan, telegram_payment_charge_id } = req.body as {
     telegram_id?: number;
     plan?: string;
@@ -72,6 +94,30 @@ router.post("/stars-payment", async (req: Request, res: Response) => {
   }
 
   try {
+    // Verify the charge server-side against Telegram when possible
+    if (process.env.TELEGRAM_BOT_TOKEN) {
+      try {
+        const verification = await verifyStarsCharge(
+          telegram_payment_charge_id,
+          telegram_id
+        );
+        if (verification.found && !verification.matchesUser) {
+          console.error(
+            `Suspicious Stars payment: charge ${telegram_payment_charge_id} belongs to a different Telegram user than ${telegram_id}`
+          );
+          res.status(400).json({ error: "Payment verification failed" });
+          return;
+        }
+        if (!verification.found) {
+          console.warn(
+            `Stars charge ${telegram_payment_charge_id} not found in recent Telegram transactions for user ${telegram_id}`
+          );
+        }
+      } catch (verificationError) {
+        console.error("Error verifying Stars charge:", verificationError);
+      }
+    }
+
     const user = await getUserByTelegramId(telegram_id);
     if (!user) {
       res.status(404).json({ error: "User not found" });

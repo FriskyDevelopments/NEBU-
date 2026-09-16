@@ -36,7 +36,7 @@ echo "   # Then switch local bot to use GitHub Pages"
 echo ""
 
 echo "📋 ENVIRONMENT VARIABLES NEEDED ON RAILWAY:"
-echo "BOT_TOKEN=8113796108:AAHvZqXdqTRzor5ep7tV0OCDWzQO_8TjBUg"
+echo "BOT_TOKEN=YOUR_BOT_TOKEN"
 echo "ZOOM_CLIENT_ID=K3t8Sd3rSZOSKfkyMftDXg"
 echo "ZOOM_CLIENT_SECRET=Gb9JmLsI1brv4bPdAPB9CSknQV4GiFB"
 echo "ZOOM_REDIRECT_URI=https://nebulosa-production.railway.app/auth/zoom/callback"

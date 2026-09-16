@@ -96,8 +96,18 @@ async function _onChatMessage({ sender, text }) {
   bus.emit('moderation_triggered', { sender, text, keyword: matched });
 
   // DOM action to remove the participant.
-  const result = await ZoomAdapter.removeParticipant(sender);
-  dbg('removeParticipant action result:', result);
+  if (ZoomAdapter && typeof ZoomAdapter.removeParticipant === 'function') {
+    try {
+      const result = await ZoomAdapter.removeParticipant(sender);
+      dbg('removeParticipant action result:', result);
+    } catch (err) {
+      dbg('removeParticipant failed:', err.message);
+      return false;
+    }
+  } else {
+    dbg('ZoomAdapter.removeParticipant not available');
+    return false;
+  }
 }
 
 // CommonJS + browser-global dual export

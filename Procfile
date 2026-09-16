@@ -1,2 +1,1 @@
-web: node railway-bot-simple.js
-worker: node railway-bot-simple.js
+web: node railway-complete-bot.js
