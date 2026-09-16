@@ -3,6 +3,8 @@
 
 const crypto = require('crypto');
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
 require('dotenv').config();
 
 const { createBot } = require('./bot/index');
@@ -41,6 +43,23 @@ app.use(express.json());
 app.get('/health', (_req, res) => {
     res.json({ status: 'ok', service: 'Stix Magic', version: '1.0.0' });
 });
+
+// ------------------------------------------------------------------
+// Serve Vite client build (Hostinger express + client:build → dist/public)
+// ------------------------------------------------------------------
+const publicDir = path.join(__dirname, 'dist', 'public');
+if (fs.existsSync(publicDir)) {
+    app.use(express.static(publicDir));
+    app.get('*', (req, res, next) => {
+        if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+        if (req.path === '/health' || req.path === '/webhook') return next();
+        res.sendFile(path.join(publicDir, 'index.html'), (err) => {
+            if (err) next(err);
+        });
+    });
+} else {
+    console.warn('⚠️ dist/public missing — SPA routes will 404 until client:build runs');
+}
 
 // ------------------------------------------------------------------
 // Start bot (webhook mode if WEBHOOK_URL is set, polling otherwise)

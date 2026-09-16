@@ -1,7 +1,8 @@
 // Stix Magic – bot setup and wiring
 'use strict';
 
-const TelegramBot = require('node-telegram-bot-api');
+const TelegramBotModule = require('node-telegram-bot-api');
+const TelegramBot = TelegramBotModule.TelegramBot || TelegramBotModule.default || TelegramBotModule;
 const { sendMagicCenter, handleMagicCenterCallback } = require('./magicCenter');
 const { handleImageMessage } = require('./handlers/stickerHandler');
 const { handleDraftCallback, handleDraftsCommand, handleTrashCommand } = require('./handlers/draftHandler');
