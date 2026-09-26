@@ -1,5 +1,7 @@
 # Nebulosa ✦ Automation & Moderation Toolkit for Live Meeting Hosts
 
+[![Node.js](https://github.com/FriskyDevelopments/NEBU-/actions/workflows/node.js.yml/badge.svg)](https://github.com/FriskyDevelopments/NEBU-/actions/workflows/node.js.yml) [![Python CI](https://github.com/FriskyDevelopments/NEBU-/actions/workflows/python.yml/badge.svg)](https://github.com/FriskyDevelopments/NEBU-/actions/workflows/python.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?logo=javascript&logoColor=black) ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white) ![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white) ![Telegram Bot](https://img.shields.io/badge/Telegram-Bot-26A5E4?logo=telegram&logoColor=white) ![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-4285F4?logo=googlechrome&logoColor=white)
+
 Nebulosa is a modular platform for automating and moderating live Zoom meetings. The platform ships two integrated products:
 
 1. **Nebulosa Control** — A Manifest V3 browser extension that runs directly in the Zoom Web Client and automates host actions (multipin, camera monitoring, moderation, waiting room).
@@ -22,6 +24,24 @@ See **[docs/extension.md](docs/extension.md)** for full setup instructions.
 The extension activates automatically on `https://*.zoom.us/*` pages.
 
 ---
+
+## Platform Overview
+
+```mermaid
+flowchart LR
+  host([Meeting host]) --> ext[Nebulosa Control<br/>apps/extension-nebulosa-control<br/>Manifest V3]
+  ext -->|DOM automation<br/>multipin · camera · moderation| zoomweb[Zoom Web Client<br/>*.zoom.us]
+  ext --> bus[packages/event-bus]
+  tguser([Telegram user / admin]) <--> tg[Telegram Bot API]
+  tg <--> bot[Nebulosa Bot<br/>railway-complete-bot.js · bot/<br/>node-telegram-bot-api]
+  bot -->|OAuth + REST| zoomapi[Zoom API]
+  bot -.->|admin automation| pup[Puppeteer<br/>scripts/puppeteer-joinZoom.js]
+  zoomapi -->|OAuth callback| ghp[GitHub Pages<br/>gh-pages/ · github-pages-oauth/]
+  op([Operator]) --> dash[client/ dashboard<br/>React + Vite]
+  dash -->|/api/v1/*| ctl[server/nebulosa<br/>Express control API]
+  ctl <-->|signed heartbeat · claim · report| exec[Executors]
+  ctl --> db[(PostgreSQL · Drizzle<br/>shared/schema.ts)]
+```
 
 ## Platform Architecture
 
@@ -125,16 +145,9 @@ docs/
 - Zoom OAuth App (User-level)
 
 ### Environment Variables
-```env
-BOT_TOKEN=your_telegram_bot_token
-LOG_CHANNEL_ID=your_telegram_channel_id
-ADMIN_USER_ID=your_telegram_user_id
-ZOOM_USER_CLIENT_ID=your_zoom_client_id
-ZOOM_USER_CLIENT_SECRET=your_zoom_client_secret
-ZOOM_REDIRECT_URI=your_redirect_uri
-GITHUB_OAUTH_CALLBACK=https://your-username.github.io/your-repo/
-DATABASE_URL=your_postgresql_url
-```
+Names only. Set real values in your environment or secret manager, never in the repo.
+
+`BOT_TOKEN` · `LOG_CHANNEL_ID` · `ADMIN_USER_ID` · `ZOOM_USER_CLIENT_ID` · `ZOOM_USER_CLIENT_SECRET` · `ZOOM_REDIRECT_URI` · `GITHUB_OAUTH_CALLBACK` · `DATABASE_URL`
 
 ### Installation
 ```bash
@@ -214,6 +227,11 @@ npm run dev
 
 ## Deployment
 
+### Deploy configs in this repo
+- **Telegram bot + OAuth server:** `Dockerfile`, `Procfile` and `railway.json` start `railway-complete-bot.js`. `npm run deploy` runs `railway up`. A `render.yaml` is also present.
+- **Docs / OAuth callback pages:** the `pages.yml` and `static.yml` workflows publish the repo to GitHub Pages. `deploy/cloudflare-worker.js` serves the legacy and docs paths.
+- **Browser extension:** loaded unpacked from `apps/extension-nebulosa-control/` (see [docs/extension.md](docs/extension.md)).
+
 ### Replit Deployment
 1. Import repository to Replit
 2. Configure environment variables
@@ -261,16 +279,11 @@ The repository now includes a production-oriented Nebulosa control surface under
 - **Config/environment:** `server/nebulosa/config.ts`
 
 ### Environment variables
-```env
-NEBULOSA_ENV=dev|staging|prod
-NEBULOSA_SESSION_SECRET=replace-me-in-prod
-NEBULOSA_EXECUTOR_SECRET=shared-secret-with-executors
-NEBULOSA_OPERATOR_ALLOWLIST=admin,operator
-NEBULOSA_ADMIN_PASSWORD=ChangeMe_Admin123!
-NEBULOSA_OPERATOR_PASSWORD=ChangeMe_Operator123!
-NEBULOSA_VIEWER_PASSWORD=ChangeMe_Viewer123!
-NEBULOSA_FAILED_COMMAND_THRESHOLD=5
-```
+Names only. `NEBULOSA_ENV` takes `dev`, `staging` or `prod`.
+
+`NEBULOSA_ENV` · `NEBULOSA_SESSION_SECRET` · `NEBULOSA_EXECUTOR_SECRET` · `NEBULOSA_OPERATOR_ALLOWLIST` · `NEBULOSA_ADMIN_PASSWORD` · `NEBULOSA_OPERATOR_PASSWORD` · `NEBULOSA_VIEWER_PASSWORD` · `NEBULOSA_FAILED_COMMAND_THRESHOLD`
+
+> ⚠️ Always set the three `*_PASSWORD` variables explicitly. `server/nebulosa/state.ts` falls back to built-in default passwords when they are missing.
 
 ### Core API contract
 - `POST /api/v1/auth/login`
