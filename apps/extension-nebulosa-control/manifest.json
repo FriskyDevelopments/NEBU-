@@ -39,6 +39,7 @@
         "integrations/zoom/wc-probe.js",
         "integrations/zoom/events.js",
         "integrations/zoom/state.js",
+        "integrations/zoom/host-actions.js",
         "integrations/zoom/adapter.js",
         "modules/multipin.js",
         "modules/camera-monitor.js",

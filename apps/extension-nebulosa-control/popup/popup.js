@@ -14,6 +14,8 @@ const statusDot = document.getElementById('status-dot');
 const statusText = document.getElementById('status-text');
 const pinnedList = document.getElementById('pinned-list');
 const pinnedNames = document.getElementById('pinned-names');
+const undoButton = document.getElementById('undo-host-action');
+let _lastStatus = {};
 
 // Diagnostics
 const diagToggleBtn = document.getElementById('diag-toggle');
@@ -63,6 +65,18 @@ chrome.runtime.onMessage.addListener((message) => {
   }
 });
 
+undoButton.addEventListener('click', () => {
+  if (undoButton.disabled) return;
+  undoButton.disabled = true;
+  chrome.runtime.sendMessage({ type: 'UNDO_HOST_ACTION' }, (response) => {
+    if (chrome.runtime.lastError || !response || !response.ok) {
+      const state = PopupStatusHelpers.undoButtonState(_lastStatus);
+      undoButton.disabled = !state.enabled;
+      undoButton.textContent = state.label;
+    }
+  });
+});
+
 // ── Toggle change handlers ────────────────────────────────────────────────────
 Object.entries(toggles).forEach(([mod, input]) => {
   input.addEventListener('change', () => {
@@ -81,6 +95,7 @@ Object.entries(toggles).forEach(([mod, input]) => {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function _applyStatus(status) {
+  _lastStatus = status || {};
   const active = !!status.automationArmed;
   const interactive = PopupStatusHelpers.canInteractWithToggles(status);
   _setStatus(active, PopupStatusHelpers.humanStatus(status));
@@ -93,6 +108,10 @@ function _applyStatus(status) {
   toggles.cameraMonitor.checked = !!status.cameraMonitor;
   toggles.moderation.checked = !!status.moderation;
   toggles.waitingRoom.checked = !!status.waitingRoom;
+
+  const undoState = PopupStatusHelpers.undoButtonState(status);
+  undoButton.disabled = !undoState.enabled;
+  undoButton.textContent = undoState.label;
 
   // Show pinned participants list
   const pinned = Array.isArray(status.pinned) ? status.pinned : [];

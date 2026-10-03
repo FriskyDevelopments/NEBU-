@@ -204,6 +204,19 @@
         sendResponse({ ok: true });
         return false;
       }
+      case 'UNDO_HOST_ACTION': {
+        if (!ZoomAdapter || typeof ZoomAdapter.undoLastHostAction !== 'function') {
+          sendResponse({ ok: false, code: 'UNDO_UNAVAILABLE' });
+          return false;
+        }
+        ZoomAdapter.undoLastHostAction().then((result) => {
+          _sendStatus();
+          sendResponse(result && typeof result === 'object' ? result : { ok: false, code: 'ERROR' });
+        }).catch((err) => {
+          sendResponse({ ok: false, code: 'ERROR', message: String(err && err.message ? err.message : err) });
+        });
+        return true;
+      }
       default:
         sendResponse({ ok: false, error: 'Unknown message type' });
         return false;
@@ -228,6 +241,7 @@
       moderation: ModerationModule.isEnabled(),
       waitingRoom: WaitingRoomModule.isEnabled(),
       pinned: MultipinModule.getPinned(),
+      undoableHostAction: ZoomAdapter.getUndoableHostAction ? ZoomAdapter.getUndoableHostAction() : null,
       lastEvent: _lastEvent,
       lastFailureReason: _lastFailureReason,
       selectorFailures: diag.selectorFailures || {},

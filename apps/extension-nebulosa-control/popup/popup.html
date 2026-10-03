@@ -155,6 +155,21 @@
     #pinned-list .names { color: var(--green); }
     #pinned-list.hidden { display: none; }
 
+    .undo-row { padding: 0 16px 12px; }
+    #undo-host-action {
+      width: 100%;
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    #undo-host-action:disabled { opacity: 0.45; cursor: not-allowed; }
+    #undo-host-action:not(:disabled):hover { border-color: var(--accent); }
+
     /* Diagnostics */
     .diag-toggle {
       display: flex;
@@ -261,6 +276,10 @@
 <div id="pinned-list" class="hidden">
   <div class="label">Currently pinned:</div>
   <div class="names" id="pinned-names">—</div>
+</div>
+
+<div class="undo-row">
+  <button type="button" id="undo-host-action" disabled>Undo last host action</button>
 </div>
 
 <!-- Diagnostics (collapsible) -->

@@ -35,6 +35,7 @@ let _lastStatus = {
   automationArmed: false,
   unsupportedReason: '',
   lastFailureReason: '',
+  undoableHostAction: null,
 };
 
 /**
@@ -61,6 +62,7 @@ function _resetStatus() {
     automationArmed: false,
     unsupportedReason: '',
     lastFailureReason: '',
+    undoableHostAction: null,
   };
   _broadcastStatus();
 }
@@ -115,8 +117,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
-  if (message.type === 'TOGGLE_MODULE') {
-    // Popup toggling a module — forward to the tracked active Zoom tab
+  if (message.type === 'TOGGLE_MODULE' || message.type === 'UNDO_HOST_ACTION') {
+    // Popup request that must run in the Zoom tab (module toggle or undo).
     _forwardToZoomTab(message, sendResponse);
     return true; // async response
   }
