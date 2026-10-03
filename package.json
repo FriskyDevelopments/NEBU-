@@ -10,7 +10,7 @@
     "client:dev": "vite",
     "client:build": "vite build",
     "client:preview": "vite preview",
-    "test": "echo \"Error: no test specified\" && exit 0",
+    "test": "node --test tests/release/*.test.cjs",
     "test:browser": "playwright test"
   },
   "keywords": [
