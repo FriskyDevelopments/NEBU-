@@ -83,7 +83,12 @@ function setKeywords(keywords) {
 // ── Internal ──────────────────────────────────────────────────────────────────
 
 function _subscribe() {
-  _unsubs.push(bus.on('chat_message', _onChatMessage));
+  _unsubs.push(
+    bus.on('chat_message', _onChatMessage),
+    bus.on('meeting_ended', () => {
+      disable();
+    }),
+  );
 }
 
 async function _onChatMessage({ sender, text }) {

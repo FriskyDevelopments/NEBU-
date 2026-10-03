@@ -247,6 +247,7 @@ function init(options = {}) {
     onCameraOn: (payload) => bus.emit('camera_on', payload),
     onCameraOff: (payload) => bus.emit('camera_off', payload),
     onChatMessage: (payload) => bus.emit('chat_message', payload),
+    onMeetingEnded: (payload) => bus.emit('meeting_ended', payload || { reason: 'meeting_ended' }),
   });
 
   ZoomEvents.registerSelectorFailureCallback((payload) => {
