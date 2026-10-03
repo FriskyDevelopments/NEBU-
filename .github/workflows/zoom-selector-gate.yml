@@ -1,0 +1,23 @@
+name: Zoom selector pre-release gate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  selectors:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: node node_modules/playwright/cli.js install --with-deps chromium
+      - name: Check current sanitized Zoom UI capture
+        env:
+          ZOOM_DOM_SNAPSHOT_URL: ${{ vars.ZOOM_DOM_SNAPSHOT_URL }}
+        run: node scripts/check-zoom-selectors.cjs
