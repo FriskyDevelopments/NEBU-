@@ -38,8 +38,8 @@ type FlowState = "base" | "active" | "signal";
 
 export default function NebulosaDashboard() {
   const queryClient = useQueryClient();
-  const [username, setUsername] = useState("admin");
-  const [password, setPassword] = useState("ChangeMe_Admin123!");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [sessionId] = useState("session-main");
   const [commandInput, setCommandInput] = useState("/zoom admit all");
   const [flowState, setFlowState] = useState<{ intake: FlowState; transform: FlowState; express: FlowState }>({
@@ -49,6 +49,7 @@ export default function NebulosaDashboard() {
   });
   const [reactionLog, setReactionLog] = useState<Array<ReturnType<typeof transformToStix>>>([]);
   const [expressLog, setExpressLog] = useState<string[]>([]);
+  const [commandFeedback, setCommandFeedback] = useState<{ error: boolean; message: string } | null>(null);
 
   const sessionQuery = useQuery<SessionSummary>({
     queryKey: ["session-summary"],
@@ -89,13 +90,23 @@ export default function NebulosaDashboard() {
   });
 
   const handleParsedCommand = async (rawCommand: string) => {
+    if (createCommandMutation.isPending || !rawCommand.trim()) return;
     const parsed = parseNebuCommand(rawCommand, sessionId);
     if (!parsed) {
-      setExpressLog((prev) => ["Command not recognized. Available: /zoom admit all · /zoom mute all · /zoom lock room · /capture moment", ...prev].slice(0, 6));
+      setCommandFeedback({ error: true, message: "Command not recognized. Choose a shortcut below or check the available commands." });
       return;
     }
 
+    setCommandFeedback(null);
     setFlowState({ intake: "active", transform: "base", express: "base" });
+    try {
+      await createCommandMutation.mutateAsync(zoomCommandToApiPayload(parsed));
+    } catch {
+      setFlowState({ intake: "base", transform: "base", express: "base" });
+      setCommandFeedback({ error: true, message: "Could not queue the command. Check your connection and session, then try again." });
+      return;
+    }
+
     const intake = parsed.canonicalType === "capture.moment" ? zoomCaptureToIntake(sessionId) : zoomEventToIntake(sessionId, parsed.raw);
 
     setFlowState({ intake: "signal", transform: "active", express: "base" });
@@ -108,8 +119,8 @@ export default function NebulosaDashboard() {
     const discord = toDiscordMessage(packet);
     setExpressLog((prev) => [`${telegram}`, `${discord}`, ...prev].slice(0, 8));
 
-    await createCommandMutation.mutateAsync(zoomCommandToApiPayload(parsed));
     setFlowState({ intake: "signal", transform: "signal", express: "signal" });
+    setCommandFeedback({ error: false, message: "Command queued. Check the queue for execution status." });
   };
 
   const sortedCommands = useMemo(
@@ -126,11 +137,19 @@ export default function NebulosaDashboard() {
             <CardDescription>Authenticate to restore command routing and session visibility.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="username" />
-            <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="password" />
-            <Button onClick={() => loginMutation.mutate()} disabled={loginMutation.isPending}>
-              {loginMutation.isPending ? "Signing in…" : "Sign in"}
-            </Button>
+            <form className="space-y-3" onSubmit={(event) => {
+              event.preventDefault();
+              if (!loginMutation.isPending) loginMutation.mutate();
+            }}>
+              <label className="block text-sm font-medium" htmlFor="operator-username">Username</label>
+              <Input id="operator-username" autoComplete="username" required value={username} onChange={(e) => setUsername(e.target.value)} />
+              <label className="block text-sm font-medium" htmlFor="operator-password">Password</label>
+              <Input id="operator-password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+              {loginMutation.isError && <p role="alert" className="text-sm text-destructive">Could not sign in. Check your credentials and connection, then try again.</p>}
+              <Button type="submit" disabled={loginMutation.isPending}>
+                {loginMutation.isPending ? "Signing in…" : "Sign in"}
+              </Button>
+            </form>
           </CardContent>
         </Card>
       </div>
@@ -169,6 +188,7 @@ export default function NebulosaDashboard() {
                   isExecuting={createCommandMutation.isPending}
                   helperText="Available commands: /zoom admit all · /zoom mute all · /zoom lock room · /capture moment"
                 />
+                {commandFeedback && <p role={commandFeedback.error ? "alert" : "status"} className={`text-sm ${commandFeedback.error ? "text-destructive" : "text-muted-foreground"}`}>{commandFeedback.message}</p>}
                 <div className="rounded-md border p-3">
                   <div className="text-sm font-medium mb-2">Express Feed</div>
                   <div className="space-y-1 text-xs text-muted-foreground">
