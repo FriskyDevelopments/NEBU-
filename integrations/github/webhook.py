@@ -9,11 +9,9 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any, Optional
-
-logger = logging.getLogger(__name__)
 
 
 class WebhookSignatureError(Exception):
@@ -51,7 +49,7 @@ class GitHubWebhookHandler:
     ----------
     webhook_secret:
         The shared secret configured in the GitHub App settings.
-        When ``None``, signature verification is skipped (test mode only).
+        Required for every delivery; missing configuration fails closed.
     """
 
     _SIGNATURE_HEADER = "x-hub-signature-256"
@@ -119,14 +117,11 @@ class GitHubWebhookHandler:
     def _verify_signature(
         self, lower_headers: dict[str, str], raw_body: bytes
     ) -> None:
-        if self._secret is None:
-            logger.warning(
-                "Webhook signature verification is disabled (no secret configured)."
-            )
-            return
+        if not self._secret:
+            raise WebhookSignatureError("Webhook secret is not configured.")
 
         signature_header = lower_headers.get(self._SIGNATURE_HEADER, "")
-        if not signature_header.startswith("sha256="):
+        if not re.fullmatch(r"sha256=[0-9a-f]{64}", signature_header):
             raise WebhookSignatureError(
                 f"Missing or malformed {self._SIGNATURE_HEADER} header."
             )
