@@ -1,0 +1,37 @@
+# Runs the OAuth token encryption / rotation unit tests.
+# These use Node's built-in test runner (node:test) and have no dependencies,
+# so the job is fast and does not require `npm install`.
+name: Token Crypto
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'server/nebulosa/token-crypto.cjs'
+      - 'server/nebulosa/token-crypto.test.cjs'
+      - 'scripts/rotate-oauth-tokens.cjs'
+      - '.github/workflows/token-crypto.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'server/nebulosa/token-crypto.cjs'
+      - 'server/nebulosa/token-crypto.test.cjs'
+      - 'scripts/rotate-oauth-tokens.cjs'
+      - '.github/workflows/token-crypto.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x, 22.x]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Run token-crypto tests
+        run: node --test server/nebulosa/token-crypto.test.cjs
+      - name: Smoke-check rotation CLI help
+        run: node scripts/rotate-oauth-tokens.cjs --help
