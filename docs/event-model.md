@@ -80,11 +80,22 @@ The meeting ended or the user left. *(reserved — not yet emitted)*
 These events are emitted by feature modules to signal outcomes.
 
 ### `moderation_triggered`  *(emitted by `modules/moderation.js`)*
-A chat message matched a blocked keyword.
+A chat message matched a blocked keyword. `executed` is true only when live mode applied the Zoom action.
 
 ```js
-{ sender: string, text: string, keyword: string }
+{
+  sender: string,
+  text: string,
+  keyword: string,
+  action: 'remove' | 'mute',
+  dryRun: boolean,
+  executed: boolean,
+  result: string | null
+}
 ```
+
+### `moderation_dry_run`  *(emitted by `modules/moderation.js`)*
+Same payload as `moderation_triggered` when dry-run mode skipped the Zoom adapter call (`result` is `SKIPPED_DRY_RUN`).
 
 ### `camera_reminder_due`  *(emitted by `modules/camera-monitor.js`)*
 A participant's camera has been off longer than the configured threshold.

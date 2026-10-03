@@ -33,6 +33,8 @@ const diagReason = document.getElementById('diag-reason');
 const diagObservers = document.getElementById('diag-observers');
 const diagLastEvent = document.getElementById('diag-last-event');
 const diagEventTime = document.getElementById('diag-event-time');
+const diagDryRun = document.getElementById('diag-dry-run');
+const dryRunToggle = document.getElementById('toggle-moderation-dry-run');
 
 const toggles = {
   multipin: document.getElementById('toggle-multipin'),
@@ -78,6 +80,17 @@ Object.entries(toggles).forEach(([mod, input]) => {
   });
 });
 
+dryRunToggle.addEventListener('change', () => {
+  chrome.runtime.sendMessage(
+    { type: 'SET_MODERATION_DRY_RUN', dryRun: dryRunToggle.checked },
+    (response) => {
+      if (chrome.runtime.lastError || !response || !response.ok) {
+        dryRunToggle.checked = !dryRunToggle.checked;
+      }
+    }
+  );
+});
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function _applyStatus(status) {
@@ -88,11 +101,13 @@ function _applyStatus(status) {
   Object.values(toggles).forEach((t) => {
     t.disabled = !interactive;
   });
+  dryRunToggle.disabled = !interactive;
 
   toggles.multipin.checked = !!status.multipin;
   toggles.cameraMonitor.checked = !!status.cameraMonitor;
   toggles.moderation.checked = !!status.moderation;
   toggles.waitingRoom.checked = !!status.waitingRoom;
+  dryRunToggle.checked = !!status.moderationDryRun;
 
   // Show pinned participants list
   const pinned = Array.isArray(status.pinned) ? status.pinned : [];
@@ -124,9 +139,15 @@ function _updateDiagnostics(status) {
   diagObservers.textContent = active ? 'active' : 'inactive';
   diagObservers.className = 'diag-val ' + (active ? 'ok' : 'warn');
 
+  const dryRunOn = !!status.moderationDryRun;
+  diagDryRun.textContent = dryRunOn ? 'on' : 'off';
+  diagDryRun.className = 'diag-val ' + (dryRunOn ? 'ok' : '');
+
   if (status.lastEvent) {
     const { type, payload, ts } = status.lastEvent;
-    diagLastEvent.textContent = `${type}${payload?.name ? ` — ${payload.name}` : ''}`;
+    const who = payload?.name || payload?.sender;
+    const dryNote = payload?.dryRun ? ' (dry run)' : '';
+    diagLastEvent.textContent = `${type}${who ? ` — ${who}` : ''}${dryNote}`;
     diagLastEvent.className = 'diag-val ok';
     if (ts) {
       const ago = Math.round((Date.now() - ts) / 1000);

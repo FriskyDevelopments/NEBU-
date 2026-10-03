@@ -25,6 +25,7 @@ test('MutationObserver rescan emits participant join on zoom_web_client rows', a
     clearTimeout() {},
     setInterval() { return 1; },
     clearInterval() {},
+    addEventListener() {},
   };
   global.MutationObserver = class {
     constructor(cb) { observerCb = cb; }
