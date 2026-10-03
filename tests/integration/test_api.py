@@ -90,7 +90,9 @@ class TestReportEndpoints:
 
 
 class TestWebhookEndpoint:
-    def test_webhook_missing_required_headers(self, client):
+    def test_webhook_missing_required_headers(self, client, monkeypatch):
+        import secrets
+        monkeypatch.setenv("GITHUB_WEBHOOK_SECRET", secrets.token_hex(32))
         response = client.post(
             "/v1/webhooks/github",
             content=b"{}",
@@ -99,30 +101,23 @@ class TestWebhookEndpoint:
         # Missing x-github-event and x-github-delivery headers
         assert response.status_code == 422
 
-    def test_webhook_invalid_signature(self, client):
-        import json
-        import os
+    def test_webhook_invalid_signature(self, client, monkeypatch):
+        import secrets
+        monkeypatch.setenv("GITHUB_WEBHOOK_SECRET", secrets.token_hex(32))
+        response = client.post(
+            "/v1/webhooks/github",
+            content=b'{"action":"ping"}',
+            headers={
+                "Content-Type": "application/json",
+                "x-github-event": "ping",
+                "x-github-delivery": "abc",
+                "x-hub-signature-256": "sha256=invalidsignature",
+            },
+        )
+        assert response.status_code == 401
 
-        # Set a webhook secret so signature check is enforced
-        os.environ["GITHUB_WEBHOOK_SECRET"] = "test-secret"
-        try:
-            response = client.post(
-                "/v1/webhooks/github",
-                content=b'{"action":"ping"}',
-                headers={
-                    "Content-Type": "application/json",
-                    "x-github-event": "ping",
-                    "x-github-delivery": "abc",
-                    "x-hub-signature-256": "sha256=invalidsignature",
-                },
-            )
-            assert response.status_code == 401
-        finally:
-            del os.environ["GITHUB_WEBHOOK_SECRET"]
-
-    def test_webhook_no_secret_accepts_event(self, client):
-        import os
-        os.environ.pop("GITHUB_WEBHOOK_SECRET", None)
+    def test_webhook_no_secret_rejects_event(self, client, monkeypatch):
+        monkeypatch.delenv("GITHUB_WEBHOOK_SECRET", raising=False)
 
         response = client.post(
             "/v1/webhooks/github",
@@ -133,5 +128,4 @@ class TestWebhookEndpoint:
                 "x-github-delivery": "test-delivery-001",
             },
         )
-        assert response.status_code == 200
-        assert response.json()["delivery_id"] == "test-delivery-001"
+        assert response.status_code == 503
