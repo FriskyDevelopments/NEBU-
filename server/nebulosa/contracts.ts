@@ -44,6 +44,13 @@ export const commandResultSchema = z.object({
   output: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
 });
 
+export const executorFailureSchema = z.object({
+  attempt: z.number().int().positive(),
+  error: z.string().min(1).max(1000),
+  executorId: z.string().min(1),
+  failedAt: z.string().min(1),
+});
+
 export const commandRecordSchema = z.object({
   id: z.string(),
   type: commandTypeSchema,
@@ -55,6 +62,9 @@ export const commandRecordSchema = z.object({
   executorId: z.string().nullable(),
   result: commandResultSchema.nullable(),
   error: z.string().nullable(),
+  attempt: z.number().int().positive(),
+  maxAttempts: z.number().int().min(1).max(10),
+  failures: z.array(executorFailureSchema),
   auditMetadata: z.record(z.string(), z.string()),
 });
 export type CommandRecord = z.infer<typeof commandRecordSchema>;
