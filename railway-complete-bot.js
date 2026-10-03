@@ -3,6 +3,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const axios = require('axios');
 const crypto = require('crypto');
+const WebhookHealth = require('./bot/webhookHealth');
 require('dotenv').config();
 
 class CompleteRailwayBot {
@@ -49,6 +50,9 @@ class CompleteRailwayBot {
 
         // Initialize bot and express
         this.bot = new TelegramBot(this.BOT_TOKEN, { webHook: false });
+        this.botHealth = new WebhookHealth(() => this.bot.setWebHook(
+            this.WEBHOOK_URL, { secret_token: this.WEBHOOK_SECRET }
+        ));
         this.userSessions = new Map();
         this.oauthSessions = new Map();
 
@@ -135,8 +139,10 @@ class CompleteRailwayBot {
         // HEALTH & STATUS
         // ======================
         this.app.get('/health', (req, res) => {
+            const bot = this.botHealth.snapshot();
             res.json({
-                status: 'healthy',
+                status: bot.status === 'ready' ? 'healthy' : 'degraded',
+                bot,
                 service: 'nebulosa-bot-oauth',
                 webhook_url: this.WEBHOOK_URL,
                 oauth_callback: this.ZOOM_REDIRECT_URI,
@@ -184,7 +190,7 @@ class CompleteRailwayBot {
         });
 
         // Start server
-        this.app.listen(this.PORT, '0.0.0.0', () => {
+        this.server = this.app.listen(this.PORT, '0.0.0.0', () => {
             console.log(`🌐 Complete Railway server running on port ${this.PORT}`);
             console.log(`📱 Telegram webhook: ${this.WEBHOOK_URL}`);
             console.log(`🔐 OAuth callback: ${this.ZOOM_REDIRECT_URI}`);
@@ -329,10 +335,14 @@ ${authUrl}
             if (!this.isAdminContext(msg)) return this.refuseAdmin(msg, '/status');
             const chatId = msg.chat.id;
             const zoomLinked = this.userSessions.has(chatId);
+            const health = this.botHealth.snapshot();
 
             const statusMessage = `📊 NEBULOSA BOT Status
 
-🤖 Bot: ✅ Running (Railway)
+🤖 Bot webhook: ${health.status}
+🔄 Reconnect attempts: ${health.reconnectAttempts}
+⏳ Next retry: ${health.nextRetryAt || 'none'}
+✅ Last connected: ${health.lastConnectedAt || 'never'}
 🔐 OAuth Server: ✅ Active
 ⏰ Uptime: ${Math.floor(process.uptime())}s
 🔑 Zoom (this chat): ${zoomLinked ? '✅ linked' : '❌ no token — /zoomlogin'}
@@ -450,21 +460,7 @@ Hello ${username}! Your Zoom account is now connected.
     }
 
     async setWebhook() {
-        try {
-            await this.bot.deleteWebHook();
-            console.log('🗑️ Existing webhook removed');
-
-            const result = await this.bot.setWebHook(this.WEBHOOK_URL, { secret_token: this.WEBHOOK_SECRET });
-            if (result) {
-                console.log('✅ Webhook set successfully:', this.WEBHOOK_URL);
-            }
-
-            const webhookInfo = await this.bot.getWebHookInfo();
-            console.log('📡 Webhook info:', webhookInfo);
-
-        } catch (error) {
-            console.error('❌ Webhook setup error:', error.message);
-        }
+        await this.botHealth.connect();
     }
 
     // HTML response pages
@@ -533,11 +529,9 @@ Hello ${username}! Your Zoom account is now connected.
     }
 }
 
-// Start the complete Railway bot
-const railwayBot = new CompleteRailwayBot();
+if (require.main === module) {
+    new CompleteRailwayBot();
+    console.log('🚂 NEBULOSA BOT - Complete Railway deployment started!');
+}
 
-console.log('🚂 NEBULOSA BOT - Complete Railway deployment started!');
-console.log('✅ Both Telegram Bot and OAuth Server are running');
-console.log('🔗 OAuth should now work without 4700 errors');
-
-module.exports = railwayBot;
+module.exports = CompleteRailwayBot;
