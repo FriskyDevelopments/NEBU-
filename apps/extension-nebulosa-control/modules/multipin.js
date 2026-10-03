@@ -102,6 +102,9 @@ function _subscribe() {
     bus.on('camera_on', _onCameraOn),
     bus.on('camera_off', _onCameraOff),
     bus.on('participant_left', _onParticipantLeft),
+    bus.on('meeting_ended', () => {
+      disable();
+    }),
   );
 }
 

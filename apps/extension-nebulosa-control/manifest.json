@@ -45,6 +45,7 @@
         "modules/moderation.js",
         "modules/waiting-room.js",
         "content/bootstrap-gate.js",
+        "content/meeting-session.js",
         "content/zoom.js"
       ],
       "run_at": "document_idle"

@@ -17,6 +17,7 @@
   const CameraMonitorModule = window.NebulosaCameraMonitor;
   const ModerationModule = window.NebulosaModeration;
   const WaitingRoomModule = window.NebulosaWaitingRoom;
+  const MeetingSession = window.MeetingSession;
 
   const DEBUG = window.__NEBULOSA_DEBUG === true;
   function log(event, payload = {}) {
@@ -31,6 +32,7 @@
   };
 
   let _initialised = false;
+  let _endingSession = false;
   let _watchStarted = false;
   let _bootstrapStarted = false;
   let _bootstrapStartTs = 0;
@@ -79,6 +81,25 @@
 
       if (!_initialised) _lastFailureReason = cap.unsupportedReason || cap.reason || '';
 
+      const meetingPlan = MeetingSession
+        ? MeetingSession.planMeetingEnd(_initialised, cap.meetingState)
+        : 'continue';
+      if (meetingPlan === 'cleanup') {
+        _endBotSession(cap.reason || 'meeting_ended');
+        return;
+      }
+      if (meetingPlan === 'hold') {
+        _stopBootstrapLoop();
+        _bootstrapStarted = false;
+        _status.bootstrapPhase = 'ended';
+        _status.meetingDetected = false;
+        _status.observersActive = false;
+        _status.automationArmed = false;
+        _lastFailureReason = cap.reason || 'meeting_ended';
+        _sendStatus();
+        return;
+      }
+
       if (!_initialised && !_bootstrapStarted) {
         _beginBootstrap();
       }
@@ -111,6 +132,15 @@
     const elapsed = Date.now() - _bootstrapStartTs;
     const cap = ZoomState.detectCapabilities();
     _status = { ..._status, ...cap, url: window.location.href };
+
+    if (cap.meetingState === 'ended') {
+      _status.bootstrapPhase = 'ended';
+      _lastFailureReason = cap.reason || 'meeting_ended';
+      _stopBootstrapLoop();
+      _bootstrapStarted = false;
+      _sendStatus();
+      return;
+    }
 
     if (elapsed > 15000) {
       _status.bootstrapPhase = 'failed';
@@ -180,8 +210,51 @@
     bus.on('camera_on', _trackEvent('camera_on'));
     bus.on('camera_off', _trackEvent('camera_off'));
     bus.on('moderation_triggered', _trackEvent('moderation_triggered'));
+    bus.on('meeting_ended', (payload) => {
+      _lastEvent = { type: 'meeting_ended', payload: payload || {}, ts: Date.now() };
+      _endBotSession((payload && payload.reason) || 'meeting_ended');
+    });
 
     _sendStatus();
+  }
+
+  function _sessionModules() {
+    return {
+      multipin: MultipinModule,
+      cameraMonitor: CameraMonitorModule,
+      moderation: ModerationModule,
+      waitingRoom: WaitingRoomModule,
+    };
+  }
+
+  function _endBotSession(reason) {
+    if (_endingSession || !_initialised) return;
+    _endingSession = true;
+    const endedReason = reason || 'meeting_ended';
+    try {
+      if (MeetingSession) {
+        MeetingSession.cleanupBotSession({
+          reason: endedReason,
+          bus,
+          adapter: ZoomAdapter,
+          modules: _sessionModules(),
+        });
+      }
+    } finally {
+      _initialised = false;
+      _bootstrapStarted = false;
+      _stopBootstrapLoop();
+      _status.observersActive = false;
+      _status.meetingDetected = false;
+      _status.automationArmed = false;
+      _status.bootstrapPhase = 'ended';
+      _status.meetingState = 'ended';
+      _lastFailureReason = endedReason;
+      _lastEvent = { type: 'meeting_ended', payload: { reason: endedReason }, ts: Date.now() };
+      log('bot_session_cleaned', { reason: endedReason });
+      _sendStatus();
+      _endingSession = false;
+    }
   }
 
   function _enabledModules() {
