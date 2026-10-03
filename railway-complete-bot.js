@@ -343,6 +343,7 @@ ${authUrl}
 🔄 Reconnect attempts: ${health.reconnectAttempts}
 ⏳ Next retry: ${health.nextRetryAt || 'none'}
 ✅ Last connected: ${health.lastConnectedAt || 'never'}
+⚠️ Last failure: ${health.lastFailureAt || 'never'}
 🔐 OAuth Server: ✅ Active
 ⏰ Uptime: ${Math.floor(process.uptime())}s
 🔑 Zoom (this chat): ${zoomLinked ? '✅ linked' : '❌ no token — /zoomlogin'}

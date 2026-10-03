@@ -113,7 +113,10 @@ test('scripted check: /health and admin /status reflect failure and recovery', a
         assert.equal(body.bot.status, expected);
         assert.equal(body.status, expected === 'ready' ? 'healthy' : 'degraded');
         status(caller);
-        assert.ok(messages.pop().includes(`Bot webhook: ${expected}`));
+        const message = messages.pop();
+        assert.ok(message.includes(`Bot webhook: ${expected}`));
+        assert.ok(message.includes(`Reconnect attempts: ${body.bot.reconnectAttempts}`));
+        assert.ok(message.includes(`Last failure: ${body.bot.lastFailureAt || 'never'}`));
         return body;
     };
     await check('starting');
