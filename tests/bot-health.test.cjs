@@ -1,8 +1,15 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { once } = require('node:events');
+const { readFileSync } = require('node:fs');
+const path = require('node:path');
 const WebhookHealth = require('../bot/webhookHealth');
 const CompleteRailwayBot = require('../railway-complete-bot');
+
+test('Docker runtime includes the webhook health module', () => {
+    const dockerfile = readFileSync(path.join(__dirname, '../Dockerfile'), 'utf8');
+    assert.match(dockerfile, /^COPY bot\/webhookHealth\.js bot\/webhookHealth\.js$/m);
+});
 
 function fixture(register) {
     const timers = [];
