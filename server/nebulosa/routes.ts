@@ -13,6 +13,7 @@ import {
 } from "./service";
 import { nebulosaState } from "./state";
 import { isTelegramActive } from "./telegram";
+import { requireExecutorAuth } from "./executor-auth";
 
 
 const requestCounts = new Map<string, { count: number; resetAt: number }>();
@@ -37,11 +38,11 @@ function rateLimit(maxPerMinute: number) {
 }
 
 export function registerNebulosaRoutes(app: Express) {
-  app.get("/api/v1/telegram/status", (_req, res) => {
+  app.get("/api/v1/telegram/status", requireAuth("command:view"), (_req, res) => {
     res.json({ active: isTelegramActive() });
   });
 
-  app.get("/api/v1/health", (_req, res) => {
+  app.get("/api/v1/health", requireAuth("command:view"), (_req, res) => {
     res.json(healthSnapshot());
   });
 
@@ -112,16 +113,16 @@ export function registerNebulosaRoutes(app: Express) {
     }
   });
 
-  app.post("/api/v1/executor/heartbeat", rateLimit(120), (req, res) => {
+  app.post("/api/v1/executor/heartbeat", rateLimit(120), requireExecutorAuth, (req, res) => {
     try {
-      registerHeartbeat(req.body, req.headers["x-nebulosa-signature"] as string | undefined);
+      registerHeartbeat(req.body);
       res.status(202).json({ accepted: true });
     } catch {
       res.status(401).json({ code: "invalid_signature", message: "Executor authentication failed." });
     }
   });
 
-  app.post("/api/v1/executor/claim", rateLimit(120), (req, res) => {
+  app.post("/api/v1/executor/claim", rateLimit(120), requireExecutorAuth, (req, res) => {
     try {
       const command = claimCommand(req.body);
       if (!command) return res.status(204).send();
@@ -131,7 +132,7 @@ export function registerNebulosaRoutes(app: Express) {
     }
   });
 
-  app.post("/api/v1/executor/report", rateLimit(120), (req, res) => {
+  app.post("/api/v1/executor/report", rateLimit(120), requireExecutorAuth, (req, res) => {
     try {
       const command = updateCommandExecution(req.body);
       if (!command) return res.status(404).json({ code: "not_found", message: "Command not found." });

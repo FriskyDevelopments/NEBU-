@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import type { Request, Response, NextFunction } from "express";
-import { config, signExecutorNonce } from "./config";
+import { config } from "./config";
 import {
   claimCommandSchema,
   commandExecutionSchema,
@@ -230,12 +230,8 @@ export function updateCommandExecution(input: unknown) {
   return command;
 }
 
-export function registerHeartbeat(input: unknown, signature: string | undefined) {
+export function registerHeartbeat(input: unknown) {
   const payload = heartbeatSchema.parse(input);
-  const expectedSig = signExecutorNonce(payload.executorId, payload.nonce);
-  if (!signature || signature !== expectedSig) {
-    throw new Error("Invalid executor signature");
-  }
 
   nebulosaState.executors.set(payload.executorId, {
     id: payload.executorId,
