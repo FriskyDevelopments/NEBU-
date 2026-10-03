@@ -23,10 +23,12 @@ export async function apiRequest(
     const mockRes = getMockResponse(method, url);
     if (mockRes) {
       console.log(`[Mock] Intercepted ${method} ${url} with status ${mockRes.status}`);
-      return new Response(JSON.stringify(mockRes.data), {
+      const res = new Response(JSON.stringify(mockRes.data), {
         status: mockRes.status,
         headers: { "Content-Type": "application/json" }
       });
+      await throwIfResNotOk(res);
+      return res;
     } else {
       console.warn(`[Mock] Unhandled route: ${method} ${url}`);
       // Fall through to real request if mock is not defined
