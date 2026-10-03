@@ -15,6 +15,7 @@ import { SessionGrid } from "@/ui/nebu/SessionGrid";
 import { NodeGraph } from "@/ui/nebu/NodeGraph";
 import { ReactionPanel } from "@/ui/stix/ReactionPanel";
 import { XiGlyph } from "@/ui/stix/XiGlyph";
+import { automationStatus, participantStatus, type ExecutorStatus, type MeetingStatus } from "@/lib/meeting-health";
 
 type SessionSummary = {
   environment: "dev" | "staging" | "prod";
@@ -74,6 +75,20 @@ export default function NebulosaDashboard() {
   const alertsQuery = useQuery<Alert[]>({
     queryKey: ["alerts"],
     queryFn: async () => (await apiRequest("GET", "/api/v1/alerts")).json(),
+    enabled: sessionQuery.isSuccess,
+    refetchInterval: 10_000,
+  });
+
+  const meetingsQuery = useQuery<MeetingStatus[]>({
+    queryKey: ["active-meetings"],
+    queryFn: async () => (await apiRequest("GET", "/api/meetings/active")).json(),
+    enabled: sessionQuery.isSuccess,
+    refetchInterval: 10_000,
+  });
+
+  const executorsQuery = useQuery<ExecutorStatus[]>({
+    queryKey: ["executors"],
+    queryFn: async () => (await apiRequest("GET", "/api/v1/executors")).json(),
     enabled: sessionQuery.isSuccess,
     refetchInterval: 10_000,
   });
@@ -194,6 +209,23 @@ export default function NebulosaDashboard() {
                       alerts: alertsQuery.data?.length ?? 0,
                     }}
                   />
+                  <div className="meeting-health">
+                    <dl className="space-y-3" aria-label="Meeting and automation status">
+                      <div>
+                        <dt className="font-medium">Participants</dt>
+                        <dd className="text-muted-foreground">
+                          {meetingsQuery.isError ? "Participant status unavailable" : meetingsQuery.isPending ? "Loading participant status…" : participantStatus(meetingsQuery.data)}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="font-medium">Automation</dt>
+                        <dd className="text-muted-foreground">
+                          {executorsQuery.isError ? "Automation status unavailable" : executorsQuery.isPending ? "Loading automation status…" : automationStatus(executorsQuery.data)}
+                        </dd>
+                      </div>
+                    </dl>
+                    <p className="text-xs text-muted-foreground">Executor readiness, not module enablement. Heartbeats expire after 60s; status refreshes every 10s.</p>
+                  </div>
                   <NodeGraph intake={flowState.intake} transform={flowState.transform} express={flowState.express} />
                 </CardContent>
               </Card>
