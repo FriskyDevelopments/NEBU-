@@ -36,7 +36,10 @@ export const getMockResponse = (method: string, url: string): { status: number, 
     },
     "GET:/api/v1/commands": () => {
       if (scenario === "empty" || scenario === "partial") return [];
-      return commandsFixture;
+      return commandsFixture.map((command) => ({
+        ...command,
+        failures: command.failures?.map((failure) => ({ ...failure })),
+      }));
     },
     "GET:/api/v1/alerts": () => {
       if (scenario === "empty" || scenario === "partial") return [];
@@ -50,6 +53,18 @@ export const getMockResponse = (method: string, url: string): { status: number, 
     "POST:/api/v1/auth/login": () => ({ message: "Mock login successful" }),
     "POST:/api/v1/commands": () => ({ message: "Mock command queued" }),
   };
+
+  if (method.toUpperCase() === "POST" && url.startsWith("/api/v1/commands/") && url.endsWith("/retry")) {
+    const commandId = url.split("/")[4];
+    const existing = commandsFixture.find((command) => command.id === commandId);
+    if (!existing || existing.status !== "failed") {
+      return { status: 409, data: { code: "not_retryable", message: "Cannot retry command from its current status" } };
+    }
+    existing.status = "pending";
+    existing.attempt = (existing.attempt ?? existing.failures?.length ?? 1) + 1;
+    existing.maxAttempts = Math.max(existing.maxAttempts ?? 3, existing.attempt);
+    return { status: 200, data: existing };
+  }
 
   if (handlers[routeKey]) {
     const data = handlers[routeKey]();

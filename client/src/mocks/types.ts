@@ -13,6 +13,10 @@ export type Command = {
   requestedBy: string;
   createdAt: string;
   expiresAt: string;
+  attempt?: number;
+  maxAttempts?: number;
+  error?: string | null;
+  failures?: Array<{ attempt: number; error: string; failedAt: string; executorId?: string }>;
 };
 
 export type Alert = {
