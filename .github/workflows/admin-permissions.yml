@@ -1,0 +1,46 @@
+# Runs the role-based admin permission unit tests.
+# Test-only: this workflow never builds images, publishes, or deploys anything.
+name: Admin Permissions Tests
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'lib/adminPermissions.js'
+      - 'tests/unit/adminPermissions.test.js'
+      - 'railway-complete-bot.js'
+      - '.github/workflows/admin-permissions.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'lib/adminPermissions.js'
+      - 'tests/unit/adminPermissions.test.js'
+      - 'railway-complete-bot.js'
+      - '.github/workflows/admin-permissions.yml'
+  workflow_dispatch:
+
+# Least-privilege: this job only needs to read the repository.
+permissions:
+  contents: read
+
+jobs:
+  permissions-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x, 22.x]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      # Syntax-check the bot entrypoint and the permission module (no execution).
+      - name: Syntax check
+        run: |
+          node --check lib/adminPermissions.js
+          node --check railway-complete-bot.js
+      # The permission tests use only the built-in node:test runner, so no
+      # dependency install is required.
+      - name: Run admin permission tests
+        run: node --test tests/unit/adminPermissions.test.js

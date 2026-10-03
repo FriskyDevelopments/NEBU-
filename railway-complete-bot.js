@@ -3,6 +3,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const axios = require('axios');
 const crypto = require('crypto');
+const adminPermissions = require('./lib/adminPermissions');
 require('dotenv').config();
 
 class CompleteRailwayBot {
@@ -373,9 +374,10 @@ ${authUrl}
             }
         });
 
-        // Shutdown command — OWNER user id only, even inside the control chat.
+        // Shutdown command — requires the OWNER role (see adminPermissions matrix),
+        // so it is owner-only even inside the control chat.
         this.bot.onText(/\/shutdown/, async (msg) => {
-            if (!this.isOwnerUser(msg.from && msg.from.id)) return this.refuseAdmin(msg, '/shutdown');
+            if (!this.canRunCommand(msg, '/shutdown')) return this.refuseAdmin(msg, '/shutdown');
             const chatId = msg.chat.id;
             console.log(`🛑 Shutdown requested by owner (user ${msg.from.id})`);
             try {
@@ -390,8 +392,24 @@ ${authUrl}
     // ======================
     // ADMIN GATE HELPERS
     // ======================
-    // Single gate: numeric comparison via Number() + ===. Number(undefined)/Number('undefined')
-    // are NaN and never match, so a missing/malformed OWNER_ID fails closed.
+    // Authorisation is defined by lib/adminPermissions.js (explicit roles +
+    // a command->required-role matrix). These helpers are thin adapters that
+    // feed the bot's runtime config into those pure functions.
+    //
+    // Numeric comparison fails closed: a missing/malformed OWNER_ID resolves the
+    // caller to the USER role, which cannot run any admin command.
+    permissionConfig() {
+        return {
+            ownerId: this.ownerConfigured ? this.OWNER_ID : undefined,
+            controlChatId: this.controlChatConfigured ? this.CONTROL_CHAT_ID : null,
+        };
+    }
+
+    // Role of the caller for a given message: 'owner' | 'control' | 'user'.
+    roleFor(msg) {
+        return adminPermissions.resolveRole(msg, this.permissionConfig());
+    }
+
     isOwnerUser(userId) {
         return this.ownerConfigured && Number(userId) === this.OWNER_ID;
     }
@@ -400,16 +418,22 @@ ${authUrl}
         return this.controlChatConfigured && Number(chatId) === this.CONTROL_CHAT_ID;
     }
 
-    // Admin commands are accepted from the owner (any chat) or from the control chat.
+    // True if the caller may run `command` (e.g. '/status', '/shutdown').
+    // Delegates to the role matrix so per-command policy lives in one place.
+    canRunCommand(msg, command) {
+        return adminPermissions.canRun(msg, command, this.permissionConfig());
+    }
+
+    // Admin commands are accepted from the owner (any chat) or from the control
+    // chat — i.e. any resolved role above plain USER.
     isAdminContext(msg) {
-        const fromId = msg.from && msg.from.id;
-        return this.isOwnerUser(fromId) || this.isControlChat(msg.chat.id);
+        return this.roleFor(msg) !== adminPermissions.ROLES.USER;
     }
 
     // Silent ignore + audit log: replying would leak which commands exist.
     refuseAdmin(msg, command) {
         const fromId = msg.from && msg.from.id;
-        console.log(`⛔ ${command} refused: user ${fromId}, chat ${msg.chat.id}, ownerConfigured=${this.ownerConfigured}`);
+        console.log(`⛔ ${command} refused: user ${fromId}, chat ${msg.chat.id}, role=${this.roleFor(msg)}, ownerConfigured=${this.ownerConfigured}`);
     }
 
     async handleZoomAuthSuccess(chatId, username, tokenData) {

@@ -68,6 +68,7 @@ docs/
 |---|---|
 | [docs/architecture.md](docs/architecture.md) | Full platform architecture |
 | [docs/extension.md](docs/extension.md) | Extension setup and usage |
+| [docs/admin-permissions.md](docs/admin-permissions.md) | Role-based admin command permissions (roles, matrix, verification) |
 | [docs/browser-compat-roadmap.md](docs/browser-compat-roadmap.md) | Test-first workflow + Chrome → Firefox → Safari phased plan |
 | [docs/event-model.md](docs/event-model.md) | Event bus contract (event names, payloads, module map) |
 | [docs/tampermonkey-migration.md](docs/tampermonkey-migration.md) | Migration notes from original Puppeteer scripts |

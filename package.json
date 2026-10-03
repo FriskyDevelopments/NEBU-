@@ -10,6 +10,7 @@
     "client:dev": "vite",
     "client:build": "vite build",
     "client:preview": "vite preview",
+    "test:permissions": "node --test tests/unit/adminPermissions.test.js",
     "test": "echo \"Error: no test specified\" && exit 0"
   },
   "keywords": [
