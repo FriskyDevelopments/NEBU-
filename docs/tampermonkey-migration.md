@@ -124,7 +124,7 @@ All of these are documented in `integrations/zoom/selectors.js` with "last valid
 | Chat message detection | ⚠️ Needs testing | Zoom chat is rendered in a shadow DOM or iframe in some versions |
 | Camera reminder via chat | ❌ Not implemented | Requires DOM interaction with Zoom's chat input |
 | Moderation action (mute/remove) | ❌ Not implemented | Requires DOM interaction with Zoom's participant options menu |
-| Waiting room auto-admit | ❌ Not implemented | Architecture scaffold only |
+| Waiting room auto-admit | ✅ Guarded | Allow/deny rules with explicit safeguards in `waiting-room-rules.js` |
 | Firefox `browser.*` compatibility | ⚠️ Needs polyfill | Extension uses `chrome.*` APIs |
 
 ---

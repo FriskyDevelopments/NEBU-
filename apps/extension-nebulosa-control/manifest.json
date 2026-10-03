@@ -43,6 +43,7 @@
         "modules/multipin.js",
         "modules/camera-monitor.js",
         "modules/moderation.js",
+        "modules/waiting-room-rules.js",
         "modules/waiting-room.js",
         "content/bootstrap-gate.js",
         "content/zoom.js"

@@ -28,8 +28,10 @@
     cameraMonitorEnabled: false,
     moderationEnabled: false,
     waitingRoomEnabled: false,
+    waitingRoomRules: { allow: [], deny: [] },
   };
 
+  let _settings = { ...DEFAULT_SETTINGS };
   let _initialised = false;
   let _watchStarted = false;
   let _bootstrapStarted = false;
@@ -81,6 +83,9 @@
 
       if (!_initialised && !_bootstrapStarted) {
         _beginBootstrap();
+      }
+      if (typeof WaitingRoomModule.setHostCapable === 'function') {
+        WaitingRoomModule.setHostCapable(cap.hostCapable === true);
       }
       _sendStatus();
     };
@@ -150,6 +155,7 @@
     if (_initialised) return;
     _initialised = true;
     const settings = await _loadSettings();
+    _settings = settings;
 
     ZoomAdapter.init({ surface: capabilities.surface });
     _status.observersActive = true;
@@ -164,7 +170,12 @@
     if (settings.multipinEnabled) MultipinModule.enable();
     if (settings.cameraMonitorEnabled) CameraMonitorModule.enable();
     if (settings.moderationEnabled) ModerationModule.enable();
-    if (settings.waitingRoomEnabled) WaitingRoomModule.enable();
+    if (settings.waitingRoomEnabled) {
+      WaitingRoomModule.enable({
+        hostCapable: capabilities.hostCapable === true,
+        rules: settings.waitingRoomRules,
+      });
+    }
 
     const role = capabilities.role;
     log('role_resolved', { role, hostCapable: capabilities.hostCapable });
@@ -180,6 +191,7 @@
     bus.on('camera_on', _trackEvent('camera_on'));
     bus.on('camera_off', _trackEvent('camera_off'));
     bus.on('moderation_triggered', _trackEvent('moderation_triggered'));
+    bus.on('waiting_room_decision', _trackEvent('waiting_room_decision'));
 
     _sendStatus();
   }
@@ -214,7 +226,14 @@
     const map = { multipin: MultipinModule, cameraMonitor: CameraMonitorModule, moderation: ModerationModule, waitingRoom: WaitingRoomModule };
     const m = map[mod];
     if (!m) return;
-    enabled ? m.enable() : m.disable();
+    if (mod === 'waitingRoom' && enabled) {
+      m.enable({
+        hostCapable: _status.hostCapable === true,
+        rules: _settings.waitingRoomRules,
+      });
+    } else {
+      enabled ? m.enable() : m.disable();
+    }
     _saveSettings();
     _sendStatus();
   }
