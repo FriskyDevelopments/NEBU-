@@ -22,7 +22,7 @@ Nebulosa/
 │       ├── modules/                  # Business logic modules
 │       │   ├── multipin.js           # ✅ Hand-raise → pin automation
 │       │   ├── camera-monitor.js     # ⚡ Partial: tracking done, reminder TBD
-│       │   ├── moderation.js         # 🔲 Scaffold: detection done, action TBD
+│       │   ├── moderation.js         # keyword match; dry-run skips remove/mute
 │       │   └── waiting-room.js       # 🔲 Scaffold: architecture only
 │       ├── integrations/             # Bundled copies of shared integration code
 │       │   └── zoom/
@@ -100,7 +100,7 @@ The background worker caches the last known status so the popup always has data 
 |---|---|---|
 | multipin | ✅ Implemented | Hand-raise + camera-on → auto-pin. 60s grace on camera-off. |
 | camera-monitor | ⚡ Partial | Tracks camera-off duration. Reminder chat-send not yet validated in extension mode. |
-| moderation | 🔲 Scaffold | Chat keyword detection wired. Mute/remove DOM action TBD. |
+| moderation | ⚡ Partial | Keyword match plans a remove or mute. Dry-run logs the plan and skips the Zoom call. |
 | waiting-room | 🔲 Scaffold | Architecture boundary only. Auto-admit rules TBD. |
 
 ---

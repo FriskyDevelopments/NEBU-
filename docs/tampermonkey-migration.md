@@ -123,7 +123,7 @@ All of these are documented in `integrations/zoom/selectors.js` with "last valid
 | Camera-off detection via DOM | ⚠️ Needs testing | Same as above |
 | Chat message detection | ⚠️ Needs testing | Zoom chat is rendered in a shadow DOM or iframe in some versions |
 | Camera reminder via chat | ❌ Not implemented | Requires DOM interaction with Zoom's chat input |
-| Moderation action (mute/remove) | ❌ Not implemented | Requires DOM interaction with Zoom's participant options menu |
+| Moderation action (mute/remove) | ⚡ Behind dry-run | `ZoomAdapter` remove/mute runs only when dry-run is off |
 | Waiting room auto-admit | ❌ Not implemented | Architecture scaffold only |
 | Firefox `browser.*` compatibility | ⚠️ Needs polyfill | Extension uses `chrome.*` APIs |
 

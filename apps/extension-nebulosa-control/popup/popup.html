@@ -226,17 +226,28 @@
     </label>
   </div>
 
-  <!-- Moderation — SCAFFOLD -->
+  <!-- Moderation — keyword filter with optional dry run -->
   <div class="module-row">
     <div class="module-info">
       <div class="module-name">
         Moderation
-        <span class="badge-scaffold">Scaffold</span>
+        <span class="badge-scaffold">Partial</span>
       </div>
-      <div class="module-desc">Chat keyword filter; mute/remove action TBD</div>
+      <div class="module-desc">Chat keyword filter; remove or mute on a match</div>
     </div>
     <label class="toggle">
       <input type="checkbox" id="toggle-moderation" data-module="moderation" aria-label="Enable Moderation" />
+      <span class="toggle-slider"></span>
+    </label>
+  </div>
+
+  <div class="module-row">
+    <div class="module-info">
+      <div class="module-name">Moderation dry run</div>
+      <div class="module-desc">Log the remove or mute. Do not change the meeting</div>
+    </div>
+    <label class="toggle">
+      <input type="checkbox" id="toggle-moderation-dry-run" aria-label="Moderation dry run" />
       <span class="toggle-slider"></span>
     </label>
   </div>
@@ -281,6 +292,7 @@
   <div class="diag-row"><span class="diag-key">Automation armed:</span><span class="diag-val" id="diag-armed">—</span></div>
   <div class="diag-row"><span class="diag-key">Last failure:</span><span class="diag-val" id="diag-reason">—</span></div>
   <div class="diag-row"><span class="diag-key">Observers:</span><span class="diag-val" id="diag-observers">—</span></div>
+  <div class="diag-row"><span class="diag-key">Moderation dry run:</span><span class="diag-val" id="diag-dry-run">—</span></div>
   <div class="diag-row"><span class="diag-key">Last event:</span><span class="diag-val" id="diag-last-event">none</span></div>
   <div class="diag-row"><span class="diag-key">Event time:</span><span class="diag-val" id="diag-event-time">—</span></div>
 </div>

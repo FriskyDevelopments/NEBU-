@@ -10,7 +10,9 @@
     "client:dev": "vite",
     "client:build": "vite build",
     "client:preview": "vite preview",
-    "test": "echo \"Error: no test specified\" && exit 0"
+    "test": "echo \"Error: no test specified\" && exit 0",
+    "test:extension": "node --test apps/extension-nebulosa-control/tests/*.test.js",
+    "check:moderation-dry-run": "node scripts/moderation-dry-run-check.js"
   },
   "keywords": [
     "telegram",

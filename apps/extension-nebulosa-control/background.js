@@ -26,6 +26,7 @@ let _lastStatus = {
   multipin: false,
   cameraMonitor: false,
   moderation: false,
+  moderationDryRun: false,
   waitingRoom: false,
   pinned: [],
   surface: 'unknown',
@@ -52,6 +53,7 @@ function _resetStatus() {
     multipin: false,
     cameraMonitor: false,
     moderation: false,
+    moderationDryRun: false,
     waitingRoom: false,
     pinned: [],
     surface: 'unknown',
@@ -115,7 +117,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
-  if (message.type === 'TOGGLE_MODULE') {
+  if (message.type === 'TOGGLE_MODULE' || message.type === 'SET_MODERATION_DRY_RUN') {
     // Popup toggling a module — forward to the tracked active Zoom tab
     _forwardToZoomTab(message, sendResponse);
     return true; // async response

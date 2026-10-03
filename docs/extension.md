@@ -64,12 +64,13 @@ Nebulosa Control is a Manifest V3 browser extension that automates host actions 
 - After a configurable threshold (default: 5 minutes), emits a `camera_reminder_due` event
 - **TODO:** Actually sending a Zoom chat reminder requires DOM automation that is not yet validated in extension mode. See `modules/camera-monitor.js` for the TODO comment.
 
-### Moderation 🔲 (Scaffold)
+### Moderation
 
 - Subscribes to `chat_message` events
 - Runs messages through a configurable keyword list
 - Emits `moderation_triggered` when a keyword is found
-- **TODO:** The "mute/remove participant" DOM action is not yet implemented. See `modules/moderation.js`.
+- Live mode calls `ZoomAdapter.removeParticipant` (default) or `muteParticipant`
+- **Dry run** logs the planned remove or mute and does not change the meeting. Turn it on with `enable({ dryRun: true })`, `setDryRun(true)`, the popup toggle, or `MODERATION_DRY_RUN=1` on a Node host
 
 ### Waiting Room 🔲 (Scaffold)
 
