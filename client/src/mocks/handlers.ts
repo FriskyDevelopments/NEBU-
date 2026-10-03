@@ -28,7 +28,25 @@ export const getMockResponse = (method: string, url: string): { status: number, 
     return { status: 500, data: { message: "Internal Server Error Simulation" } };
   }
 
+  if (scenario === "partial" && routeKey === "GET:/api/v1/executors") {
+    return { status: 503, data: { message: "Executor status unavailable" } };
+  }
+
   const handlers: Record<string, () => any> = {
+    "GET:/api/meetings/active": () => {
+      if (scenario === "empty") return [];
+      if (scenario === "partial") return [{ meetingId: "demo-meeting", status: "active", participantCount: null }];
+      return [{ meetingId: "demo-meeting", status: "active", currentParticipants: 8 }];
+    },
+    "GET:/api/v1/executors": () => {
+      if (scenario === "empty") return [];
+      const now = Date.now();
+      return [
+        { id: "demo-ready", status: "ready", lastHeartbeatAt: now },
+        { id: "demo-degraded", status: "degraded", lastHeartbeatAt: now },
+        { id: "demo-stale", status: "ready", lastHeartbeatAt: now - 60_000 },
+      ];
+    },
     "GET:/api/v1/session/summary": () => {
       if (scenario === "empty") return null; // Or 404
       if (scenario === "partial") return { ...sessionFixture, alerts: 0, pendingCommands: 0 };
