@@ -1,6 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const { handleZoomAuthSuccess } = require('./bot.cjs');
+const oauthState = require('./oauth-state');
 
 const app = express();
 const PORT = 3000;
@@ -83,6 +84,40 @@ app.get('/auth/zoom/callback', async (req, res) => {
   try {
     console.log('🔄 Attempting token exchange...');
     
+    // SECURITY: validate the OAuth `state` BEFORE exchanging the authorization
+    // code for tokens (RFC 6749 §10.12 CSRF protection). An unverified state
+    // means the callback cannot be trusted, so we refuse to exchange
+    // credentials.
+    const stateResult = oauthState.validate(state);
+    if (!stateResult.valid) {
+      console.error('❌ OAuth state validation failed:', stateResult.reason);
+      res.status(403).send(`
+        <html>
+          <head>
+            <title>❌ OAuth Error</title>
+            <style>
+              body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #f5f5f5; }
+              .container { background: white; padding: 30px; border-radius: 10px; max-width: 500px; margin: auto; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+              .error { color: #dc3545; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <h1>❌ OAuth Error</h1>
+              <p class="error">Invalid or expired authorization request.</p>
+              <p>The login link can only be used once and expires after a few
+              minutes. Please start again from Telegram with
+              <code>/zoomlogin</code>.</p>
+              <p><a href="#" onclick="window.close()">Close this window</a></p>
+            </div>
+          </body>
+        </html>
+      `);
+      return;
+    }
+    // Verified Telegram user id captured when the state was issued.
+    const verifiedUserId = stateResult.metadata;
+    
     // Get credentials
     const clientId = process.env.ZOOM_USER_CLIENT_ID || process.env.ZOOM_CLIENT_ID;
     const clientSecret = process.env.ZOOM_USER_CLIENT_SECRET || process.env.ZOOM_CLIENT_SECRET;
@@ -138,9 +173,9 @@ app.get('/auth/zoom/callback', async (req, res) => {
     console.log('Refresh token received:', tokenData.refresh_token ? 'Yes' : 'No');
     console.log('Expires in:', tokenData.expires_in, 'seconds');
     
-    // Handle success in bot
-    if (state && handleZoomAuthSuccess) {
-      await handleZoomAuthSuccess(state, tokenData);
+    // Handle success in bot — bind tokens to the verified user id.
+    if (handleZoomAuthSuccess) {
+      await handleZoomAuthSuccess(verifiedUserId, tokenData);
     }
     
     res.send(`

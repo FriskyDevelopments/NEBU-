@@ -1,6 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const { handleZoomAuthSuccess } = require('./bot.cjs');
+const oauthState = require('./oauth-state');
 
 const app = express();
 const PORT = 3000;
@@ -10,7 +11,7 @@ app.get('/auth/zoom/callback', async (req, res) => {
   
   console.log('🔗 OAuth callback received:');
   console.log('Code:', code ? 'Present' : 'Missing');
-  console.log('State (User ID):', state);
+  console.log('State:', state ? 'Present' : 'Missing');
   
   if (!code) {
     res.status(400).send(`
@@ -20,6 +21,24 @@ app.get('/auth/zoom/callback', async (req, res) => {
     `);
     return;
   }
+
+  // SECURITY: validate the OAuth `state` BEFORE exchanging the authorization
+  // code for tokens (RFC 6749 §10.12 CSRF protection). Never exchange
+  // credentials for an unverified callback.
+  const stateResult = oauthState.validate(state);
+  if (!stateResult.valid) {
+    console.error('❌ OAuth state validation failed:', stateResult.reason);
+    res.status(403).send(`
+      <h1>❌ OAuth Error</h1>
+      <p>Invalid or expired authorization request. The login link can only be
+      used once and expires after a few minutes.</p>
+      <p>Please start again from Telegram with <code>/zoomlogin</code>.</p>
+    `);
+    return;
+  }
+  // The verified Telegram user id captured when the state was issued. Trust
+  // this value, not an attacker-controllable query parameter.
+  const verifiedUserId = stateResult.metadata;
   
   try {
     // Exchange code for tokens
@@ -39,8 +58,8 @@ app.get('/auth/zoom/callback', async (req, res) => {
     const tokenData = tokenResponse.data;
     console.log('✅ Token exchange successful');
     
-    // Handle success in bot
-    await handleZoomAuthSuccess(state, tokenData);
+    // Handle success in bot — bind tokens to the verified user id.
+    await handleZoomAuthSuccess(verifiedUserId, tokenData);
     
     res.send(`
       <html>
