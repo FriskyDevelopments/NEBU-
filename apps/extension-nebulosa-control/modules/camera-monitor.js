@@ -9,10 +9,6 @@
  *  - The 60-second timer for unpinning is handled in multipin.js;
  *    this module handles longer-term reminder logic (configurable threshold)
  *
- * TODO: The actual "send chat reminder" action requires Zoom chat DOM automation
- *       which is not yet validated in extension mode. The detection and timing
- *       logic is implemented; the chat-send action is scaffolded with a clear
- *       TODO below.
  */
 
 /* global window */
@@ -21,6 +17,11 @@ const bus =
   typeof require !== 'undefined'
     ? require('../../../packages/event-bus')
     : window.NebulosaBus;
+
+const adapter =
+  typeof require !== 'undefined'
+    ? require('../integrations/zoom/adapter')
+    : window.ZoomAdapter;
 
 const DEBUG =
   typeof window !== 'undefined' && window.__NEBULOSA_DEBUG === true;
@@ -36,13 +37,14 @@ const DEFAULT_REMINDER_THRESHOLD_MS = 5 * 60 * 1000;
 
 // ── Module state ──────────────────────────────────────────────────────────────
 
-/** @type {Map<string, number>} name → timestamp when camera went off */
+/** @type {Map<string, {since: number}>} One identity per camera-off period. */
 const _cameraOffSince = new Map();
 
-/** @type {Set<string>} names that have already received a reminder this session */
+/** @type {Set<string>} names already reminded during their current camera-off period */
 const _reminded = new Set();
 
 let _enabled = false;
+let _checking = false;
 let _reminderThresholdMs = DEFAULT_REMINDER_THRESHOLD_MS;
 
 /** @type {number|null} */
@@ -56,9 +58,8 @@ const _unsubs = [];
 function enable(options = {}) {
   if (_enabled) return;
   _enabled = true;
-  if (typeof options.reminderThresholdMs === 'number' && options.reminderThresholdMs >= 0) {
-    _reminderThresholdMs = options.reminderThresholdMs;
-  }
+  _reminderThresholdMs = Number.isFinite(options.reminderThresholdMs) && options.reminderThresholdMs >= 0
+    ? options.reminderThresholdMs : DEFAULT_REMINDER_THRESHOLD_MS;
   _subscribe();
   _checkInterval = window.setInterval(_checkReminders, 30_000);
   dbg('enabled — threshold:', _reminderThresholdMs, 'ms');
@@ -85,7 +86,7 @@ function isEnabled() {
 /** Returns a snapshot of participants with cameras off and how long they've been off. */
 function getCameraOffStatus() {
   const now = Date.now();
-  return [..._cameraOffSince.entries()].map(([name, since]) => ({
+  return [..._cameraOffSince.entries()].map(([name, { since }]) => ({
     name,
     offForMs: now - since,
   }));
@@ -97,7 +98,7 @@ function _subscribe() {
   _unsubs.push(
     bus.on('camera_off', ({ name }) => {
       if (!_cameraOffSince.has(name)) {
-        _cameraOffSince.set(name, Date.now());
+        _cameraOffSince.set(name, { since: Date.now() });
         dbg('tracking camera off for', name);
       }
     }),
@@ -113,33 +114,28 @@ function _subscribe() {
   );
 }
 
-function _checkReminders() {
-  const now = Date.now();
-  _cameraOffSince.forEach((since, name) => {
-    if (_reminded.has(name)) return;
-    if (now - since >= _reminderThresholdMs) {
-      _reminded.add(name);
-      dbg('sending camera reminder to', name);
-      _sendCameraReminder(name);
+async function _checkReminders() {
+  if (!_enabled || _checking) return;
+  _checking = true;
+  try {
+    // A single composer cannot safely send to multiple recipients concurrently.
+    for (const [name, period] of [..._cameraOffSince]) {
+      const shouldSend = () => _enabled && _cameraOffSince.get(name) === period && !_reminded.has(name);
+      if (!shouldSend() || Date.now() - period.since < _reminderThresholdMs) continue;
+      bus.emit('camera_reminder_due', { name });
+      try {
+        const sent = await adapter.sendPrivateChat(name, 'Please turn on your camera when you are able. Thank you!', shouldSend);
+        if (sent && shouldSend()) {
+          _reminded.add(name);
+          bus.emit('camera_reminder_sent', { name });
+        }
+      } catch (_) {
+        dbg('camera reminder failed; will retry on next check');
+      }
     }
-  });
-}
-
-/**
- * Send a camera-on reminder to the specified participant.
- *
- * TODO: Implement Zoom chat DOM automation to send a private message.
- *       This requires locating the chat input, selecting the recipient,
- *       typing the message, and submitting — all via DOM interaction.
- *       This action is NOT yet validated in extension mode.
- *       See docs/tampermonkey-migration.md for details.
- *
- * @param {string} name - Participant display name.
- */
-function _sendCameraReminder(name) {
-  // TODO: implement chat-send action via ZoomAdapter once validated
-  dbg(`[TODO] Would send camera reminder to "${name}" via Zoom chat`);
-  bus.emit('camera_reminder_due', { name });
+  } finally {
+    _checking = false;
+  }
 }
 
 // CommonJS + browser-global dual export

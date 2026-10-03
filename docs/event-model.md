@@ -93,6 +93,13 @@ A participant's camera has been off longer than the configured threshold.
 { name: string }
 ```
 
+### `camera_reminder_sent` *(emitted by `modules/camera-monitor.js`)*
+The private reminder was submitted to the Zoom chat composer. This is not a delivery receipt.
+
+```js
+{ name: string }
+```
+
 ---
 
 ## Events emitted by Content Script
