@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { canInteractWithToggles, humanStatus } = require('../popup/status-helpers');
+const { canInteractWithToggles, humanStatus, undoButtonState } = require('../popup/status-helpers');
 
 test('toggle interactivity is independent from automationArmed', () => {
   assert.equal(
@@ -47,5 +47,17 @@ test('human status distinguishes waiting room, loading, attendee partial mode, a
   assert.equal(
     humanStatus({ surface: 'zoom_web_client', meetingState: 'in_meeting_unsupported_layout' }),
     'In meeting, but current Zoom layout is unsupported'
+  );
+});
+
+test('undo button stays disabled until a reversible host action is available', () => {
+  assert.deepEqual(undoButtonState({}), { enabled: false, label: 'Undo last host action' });
+  assert.deepEqual(undoButtonState({ undoableHostAction: null }), {
+    enabled: false,
+    label: 'Undo last host action',
+  });
+  assert.deepEqual(
+    undoButtonState({ undoableHostAction: { action: 'pin', participant: 'Ada', label: 'Undo pin · Ada' } }),
+    { enabled: true, label: 'Undo pin · Ada' }
   );
 });

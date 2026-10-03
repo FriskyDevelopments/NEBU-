@@ -51,7 +51,15 @@ function humanStatus(status = {}) {
   return 'Waiting for supported Zoom state';
 }
 
-const PopupStatusHelpers = { canInteractWithToggles, humanStatus };
+function undoButtonState(status = {}) {
+  const action = status.undoableHostAction;
+  if (!action || typeof action.label !== 'string' || !action.label.trim()) {
+    return { enabled: false, label: 'Undo last host action' };
+  }
+  return { enabled: true, label: action.label };
+}
+
+const PopupStatusHelpers = { canInteractWithToggles, humanStatus, undoButtonState };
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = PopupStatusHelpers;
