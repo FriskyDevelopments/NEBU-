@@ -2,6 +2,8 @@
  * Zoom DOM Selectors — integrations/zoom/selectors.js
  */
 
+/* global window */
+
 const ZoomSelectors = {
   WC_MEETING_ROOT: [
     '[data-testid="meeting-client"]',
@@ -73,6 +75,12 @@ const ZoomSelectors = {
   CHAT_PANEL: ['#chat-panel', '[aria-label*="Chat"]', '[class*="chat-container"]'],
   CHAT_MESSAGE: ['[class*="chat-message__text"]', '[class*="chat-item"]'],
   CHAT_SENDER: ['[class*="chat-message__sender"]', '[class*="message-sender"]'],
+  CHAT_OPEN_BTN: ['button[aria-label="Chat"]', 'button[aria-label="Open Chat"]'],
+  CHAT_COMPOSER_PANEL: ['#chat-panel', '.chat-container'],
+  CHAT_RECIPIENT: ['[data-testid="chat-recipient"]', '.chat-box__receiver'],
+  CHAT_RECIPIENT_MENU: ['[data-testid="chat-recipient-menu"]', '.chat-box__receiver-list'],
+  CHAT_RECIPIENT_OPTION: ['[role="option"]', '.chat-box__receiver-list-item'],
+  CHAT_INPUT: ['textarea[aria-label="Type message here..."]', 'textarea.chat-box__chat-textarea'],
 
   TOOLBAR: ['#wc-footer', '[class*="footer-toolbar"]', '[data-testid*="footer"]', '[role="toolbar"]'],
   LEAVE_BTN: ['[aria-label*="Leave"]', 'button[class*="leave-meeting"]'],

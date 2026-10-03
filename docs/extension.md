@@ -58,11 +58,15 @@ Nebulosa Control is a Manifest V3 browser extension that automates host actions 
 
 **Requires:** Host or co-host privileges in the meeting.
 
-### Camera Monitor ⚡ (Partial)
+### Camera Monitor
 
 - Tracks camera-off start time per participant
-- After a configurable threshold (default: 5 minutes), emits a `camera_reminder_due` event
-- **TODO:** Actually sending a Zoom chat reminder requires DOM automation that is not yet validated in extension mode. See `modules/camera-monitor.js` for the TODO comment.
+- After a configurable threshold (default: 5 minutes), checks every 30 seconds and submits a private camera-on reminder through the extension's Zoom adapter.
+- Sends once per continuous camera-off period; camera-on, departure, or disabling clears tracking. Failed attempts retry on the next check.
+- Refuses to send when the recipient is missing/ambiguous, the composer contains a draft, or tracking was cancelled. Never falls back to Everyone.
+- Emits `camera_reminder_due` before an attempt and `camera_reminder_sent` after submission. Submission does not confirm delivery by Zoom.
+- Run `node --test apps/extension-nebulosa-control/tests/*.test.js`. The `camera-reminder-flow.test.js` fixture checks timing → private recipient selection → input/Enter submission → duplicate suppression and safe retry/cancellation, without accounts or credentials.
+- Live Zoom DOM selectors remain unvalidated: in a test Web Client meeting with private chat enabled, enable Camera Monitor, keep a uniquely named participant's camera off for five minutes, and confirm they receive one private reminder (not Everyone). Keep it off another minute to confirm no duplicate, then turn it on/off to start a new period. A draft in the host's chat composer must remain untouched. This is not a deployment step.
 
 ### Moderation 🔲 (Scaffold)
 

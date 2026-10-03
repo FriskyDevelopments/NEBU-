@@ -24,17 +24,18 @@ function _queryAll(selectors, root = document) {
 
 function _waitFor(selectors, timeoutMs = 3000) {
   return new Promise((resolve, reject) => {
-    const found = _queryFirst(selectors);
+    const query = typeof selectors === 'function' ? selectors : () => _queryFirst(selectors);
+    const found = query();
     if (found) return resolve(found);
     const start = Date.now();
     const id = window.setInterval(() => {
-      const el = _queryFirst(selectors);
+      const el = query();
       if (el) {
         window.clearInterval(id);
         resolve(el);
       } else if (Date.now() - start > timeoutMs) {
         window.clearInterval(id);
-        reject(new Error(`Timeout waiting for: ${selectors.join(', ')}`));
+        reject(new Error('Timeout waiting for Zoom control'));
       }
     }, 100);
   });
@@ -229,6 +230,68 @@ async function muteParticipant(name) {
   }
 }
 
+/** Submit a private message only when the recipient and empty composer are verified. */
+async function sendPrivateChat(name, text, shouldSend = () => true) {
+  try {
+    if (!name || !text || /^(everyone|everyone in meeting|all participants)$/i.test(name.trim()) || !shouldSend()) return false;
+    let panel = _queryFirst(ZoomSelectors.CHAT_COMPOSER_PANEL);
+    if (!panel) {
+      const open = _queryFirst(ZoomSelectors.CHAT_OPEN_BTN);
+      if (!open) return false;
+      open.click();
+      panel = await _waitFor(ZoomSelectors.CHAT_COMPOSER_PANEL);
+    }
+
+    const input = _queryFirst(ZoomSelectors.CHAT_INPUT, panel);
+    const recipient = _queryFirst(ZoomSelectors.CHAT_RECIPIENT, panel);
+    if (!input || !recipient || input.disabled || input.readOnly || input.value) return false;
+    if (!shouldSend()) return false;
+    recipient.click();
+    let menu;
+    try {
+      menu = await _waitFor(ZoomSelectors.CHAT_RECIPIENT_MENU);
+    } catch (_) {
+      recipient.click();
+      return false;
+    }
+    const matches = _queryAll(ZoomSelectors.CHAT_RECIPIENT_OPTION, menu)
+      .filter((item) => item.textContent.trim() === name &&
+        item.getAttribute('aria-disabled') !== 'true');
+    // Never fall back to Everyone, a partial name, or an ambiguous display name.
+    if (matches.length !== 1 || !shouldSend()) {
+      recipient.click();
+      return false;
+    }
+    matches[0].click();
+    if (recipient.textContent.trim() !== name || input.value || !shouldSend()) return false;
+
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+    setter.call(input, text);
+    input.dispatchEvent(new window.Event('input', { bubbles: true }));
+    input.focus();
+    if (!shouldSend() || recipient.textContent.trim() !== name) {
+      setter.call(input, '');
+      input.dispatchEvent(new window.Event('input', { bubbles: true }));
+      return false;
+    }
+    input.dispatchEvent(new window.KeyboardEvent('keydown', {
+      key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true,
+    }));
+    try {
+      await _waitFor(() => input.value === '');
+      return true;
+    } catch (_) {
+      if (input.value === text) {
+        setter.call(input, '');
+        input.dispatchEvent(new window.Event('input', { bubbles: true }));
+      }
+      return false;
+    }
+  } catch (_) {
+    return false;
+  }
+}
+
 let _activeSurface = 'unknown';
 
 function init(options = {}) {
@@ -269,6 +332,6 @@ function getDiagnosticsSnapshot() {
   return ZoomEvents.getDiagnosticsSnapshot();
 }
 
-const ZoomAdapter = { init, destroy, pinParticipant, unpinParticipant, admitParticipant, removeParticipant, muteParticipant, getDiagnosticsSnapshot };
+const ZoomAdapter = { init, destroy, pinParticipant, unpinParticipant, admitParticipant, removeParticipant, muteParticipant, sendPrivateChat, getDiagnosticsSnapshot };
 if (typeof module !== 'undefined' && module.exports) module.exports = ZoomAdapter;
 else if (typeof window !== 'undefined') window.ZoomAdapter = ZoomAdapter;
