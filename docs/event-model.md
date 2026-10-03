@@ -93,6 +93,17 @@ A participant's camera has been off longer than the configured threshold.
 { name: string }
 ```
 
+### `waiting_room_decision`  *(emitted by `modules/waiting-room.js`)*
+The waiting-room policy evaluated one scan. `admitted` lists display names the adapter accepted. Everyone else is in `held` with the safeguard reason (`no_allow_rules`, `deny_match`, `not_host`, `rate_limited`, and so on).
+
+```js
+{
+  admitted: string[],
+  held: { name: string, reason: string }[],
+  rejectedRuleCount: number
+}
+```
+
 ---
 
 ## Events emitted by Content Script

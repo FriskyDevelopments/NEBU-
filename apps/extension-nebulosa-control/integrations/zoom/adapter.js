@@ -123,6 +123,20 @@ async function admitParticipant(name) {
   }
 }
 
+async function admitAll() {
+  try {
+    const panel = _queryFirst(ZoomSelectors.WAITING_ROOM_PANEL);
+    if (!panel) return false;
+    const admitAllBtn = _queryFirst(ZoomSelectors.WAITING_ROOM_ADMIT_ALL_BTN, panel);
+    if (!admitAllBtn) return false;
+    admitAllBtn.click();
+    return true;
+  } catch (err) {
+    console.error('[Nebulosa:ZoomAdapter] admitAll error:', err);
+    return false;
+  }
+}
+
 
 async function removeParticipant(name) {
   try {
@@ -269,6 +283,6 @@ function getDiagnosticsSnapshot() {
   return ZoomEvents.getDiagnosticsSnapshot();
 }
 
-const ZoomAdapter = { init, destroy, pinParticipant, unpinParticipant, admitParticipant, removeParticipant, muteParticipant, getDiagnosticsSnapshot };
+const ZoomAdapter = { init, destroy, pinParticipant, unpinParticipant, admitParticipant, admitAll, removeParticipant, muteParticipant, getDiagnosticsSnapshot };
 if (typeof module !== 'undefined' && module.exports) module.exports = ZoomAdapter;
 else if (typeof window !== 'undefined') window.ZoomAdapter = ZoomAdapter;

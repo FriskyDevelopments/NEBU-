@@ -7,7 +7,7 @@ Nebulosa Control is a Manifest V3 browser extension that automates host actions 
 - **Multipin** — Automatically pins participants who raise their hand while their camera is on. Unpins them after 60 seconds if their camera turns off.
 - **Camera Monitor** — Tracks how long participants have their cameras off.
 - **Moderation** *(scaffold)* — Detects chat messages containing blocked keywords.
-- **Waiting Room** *(scaffold)* — Architecture boundary for future auto-admit logic.
+- **Waiting Room** — Admits waiting-room participants only when an explicit allow rule matches. Deny wins, and admit-all requires confirmation.
 
 ---
 
@@ -71,11 +71,36 @@ Nebulosa Control is a Manifest V3 browser extension that automates host actions 
 - Emits `moderation_triggered` when a keyword is found
 - **TODO:** The "mute/remove participant" DOM action is not yet implemented. See `modules/moderation.js`.
 
-### Waiting Room 🔲 (Scaffold)
+### Waiting Room ✅ (Guarded)
 
-- `admit(name)` is wired to `ZoomAdapter.admitParticipant()` which clicks the Admit button
-- `admitAll()` is a stub pending DOM validation
-- Auto-admit rules are not yet implemented
+Automatic admission is off until the host stores rules. With no allow rules, everyone stays in the waiting room.
+
+```js
+chrome.storage.sync.set({
+  waitingRoomEnabled: true,
+  waitingRoomRules: {
+    allow: [
+      { type: 'exact', value: 'Ada Lovelace' },
+      { type: 'prefix', value: 'Acme ' }
+    ],
+    deny: [{ type: 'exact', value: 'Acme Intruder' }]
+  }
+});
+```
+
+Safeguards, enforced in `modules/waiting-room-rules.js`:
+
+- **Default deny** — enabling the module admits nobody by itself
+- **Explicit rule types** — only `exact` and `prefix`. `*`, `?`, and regex-like rules are rejected
+- **Deny wins** — a deny match holds even when an allow rule also matches
+- **Host only** — attendee sessions cannot admit
+- **Admit-all confirmation** — `admitAll({ confirmed: true })` is required; the scanner never calls it
+- **Rate limit** — at most 5 automatic admits per 60 seconds
+- **No repeat** — a name admitted this session is not clicked again
+- **Name bounds** — empty, control-character, too-short, and too-long names are held
+- **Scoped names** — a row with only an Admit button label is ignored
+
+`admit(name)` is a single explicit admit. It still requires the module to be on, a host-capable caller, and a safe display name.
 
 ---
 

@@ -23,7 +23,8 @@ Nebulosa/
 │       │   ├── multipin.js           # ✅ Hand-raise → pin automation
 │       │   ├── camera-monitor.js     # ⚡ Partial: tracking done, reminder TBD
 │       │   ├── moderation.js         # 🔲 Scaffold: detection done, action TBD
-│       │   └── waiting-room.js       # 🔲 Scaffold: architecture only
+│       │   ├── waiting-room-rules.js # ✅ Allow/deny policy with explicit safeguards
+│       │   └── waiting-room.js       # ✅ Policy-gated admit; admit-all needs confirmation
 │       ├── integrations/             # Bundled copies of shared integration code
 │       │   └── zoom/
 │       ├── packages/                 # Bundled copies of shared packages
@@ -101,7 +102,7 @@ The background worker caches the last known status so the popup always has data 
 | multipin | ✅ Implemented | Hand-raise + camera-on → auto-pin. 60s grace on camera-off. |
 | camera-monitor | ⚡ Partial | Tracks camera-off duration. Reminder chat-send not yet validated in extension mode. |
 | moderation | 🔲 Scaffold | Chat keyword detection wired. Mute/remove DOM action TBD. |
-| waiting-room | 🔲 Scaffold | Architecture boundary only. Auto-admit rules TBD. |
+| waiting-room | ✅ Guarded | Explicit allow/deny rules. Default deny, host-only, rate limit, admit-all confirmation. |
 
 ---
 
