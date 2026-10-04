@@ -68,8 +68,11 @@ Nebulosa Control is a Manifest V3 browser extension that automates host actions 
 
 - Subscribes to `chat_message` events
 - Runs messages through a configurable keyword list
-- Emits `moderation_triggered` when a keyword is found
-- **TODO:** The "mute/remove participant" DOM action is not yet implemented. See `modules/moderation.js`.
+- Emits `moderation_triggered` with the proposed action when a keyword is found
+- Removes the matching participant through the Zoom adapter by default
+- The **Moderation dry run** popup toggle persists across sessions and reports
+  actions without changing the meeting
+- Code integrations can also use `enable({ dryRun: true })` or `setDryRun(true)`
 
 ### Waiting Room 🔲 (Scaffold)
 

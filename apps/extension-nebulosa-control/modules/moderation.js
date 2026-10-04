@@ -12,9 +12,10 @@
  *  - Subscribes to chat_message events from the event bus
  *  - Runs messages through a configurable keyword filter
  *  - Emits a moderation_triggered event with details
+ *  - Supports a dry-run mode that reports actions without executing them
  *
  * What still needs validation / implementation:
- *  - Actually muting/removing a participant via DOM (TODO below)
+ *  - Validate participant removal against current Zoom Web Client selectors
  *  - Private message sending via DOM (TODO below)
  *
  * See docs/tampermonkey-migration.md for full status.
@@ -44,6 +45,7 @@ const DEFAULT_BLOCKED_KEYWORDS = [];
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let _enabled = false;
+let _dryRun = false;
 let _blockedKeywords = [...DEFAULT_BLOCKED_KEYWORDS];
 const _unsubs = [];
 
@@ -52,11 +54,14 @@ const _unsubs = [];
 function enable(options = {}) {
   if (_enabled) return;
   _enabled = true;
+  if (typeof options.dryRun === 'boolean') {
+    _dryRun = options.dryRun;
+  }
   if (Array.isArray(options.blockedKeywords)) {
     _blockedKeywords = options.blockedKeywords.map((k) => String(k).toLowerCase());
   }
   _subscribe();
-  dbg('enabled — keywords:', _blockedKeywords);
+  dbg('enabled — keywords:', _blockedKeywords, 'dry run:', _dryRun);
 }
 
 function disable() {
@@ -69,6 +74,15 @@ function disable() {
 
 function isEnabled() {
   return _enabled;
+}
+
+function isDryRun() {
+  return _dryRun;
+}
+
+function setDryRun(dryRun) {
+  _dryRun = dryRun === true;
+  dbg('dry run:', _dryRun);
 }
 
 function setKeywords(keywords) {
@@ -93,7 +107,19 @@ async function _onChatMessage({ sender, text }) {
   if (!matched) return;
 
   dbg('moderation triggered — sender:', sender, 'keyword:', matched);
-  bus.emit('moderation_triggered', { sender, text, keyword: matched });
+  const action = 'remove_participant';
+  bus.emit('moderation_triggered', {
+    sender,
+    text,
+    keyword: matched,
+    action,
+    dryRun: _dryRun,
+  });
+
+  if (_dryRun) {
+    dbg('dry run — skipped action:', action, 'target:', sender);
+    return 'DRY_RUN';
+  }
 
   // DOM action to remove the participant.
   if (ZoomAdapter && typeof ZoomAdapter.removeParticipant === 'function') {
@@ -111,7 +137,14 @@ async function _onChatMessage({ sender, text }) {
 }
 
 // CommonJS + browser-global dual export
-const ModerationModule = { enable, disable, isEnabled, setKeywords };
+const ModerationModule = {
+  enable,
+  disable,
+  isEnabled,
+  isDryRun,
+  setDryRun,
+  setKeywords,
+};
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = ModerationModule;

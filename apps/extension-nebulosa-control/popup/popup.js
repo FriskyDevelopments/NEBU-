@@ -33,6 +33,7 @@ const diagReason = document.getElementById('diag-reason');
 const diagObservers = document.getElementById('diag-observers');
 const diagLastEvent = document.getElementById('diag-last-event');
 const diagEventTime = document.getElementById('diag-event-time');
+const moderationDryRunToggle = document.getElementById('toggle-moderation-dry-run');
 
 const toggles = {
   multipin: document.getElementById('toggle-multipin'),
@@ -78,6 +79,17 @@ Object.entries(toggles).forEach(([mod, input]) => {
   });
 });
 
+moderationDryRunToggle.addEventListener('change', () => {
+  chrome.runtime.sendMessage(
+    { type: 'SET_MODERATION_DRY_RUN', dryRun: moderationDryRunToggle.checked },
+    (response) => {
+      if (chrome.runtime.lastError || !response || !response.ok) {
+        moderationDryRunToggle.checked = !moderationDryRunToggle.checked;
+      }
+    }
+  );
+});
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function _applyStatus(status) {
@@ -88,11 +100,13 @@ function _applyStatus(status) {
   Object.values(toggles).forEach((t) => {
     t.disabled = !interactive;
   });
+  moderationDryRunToggle.disabled = !interactive;
 
   toggles.multipin.checked = !!status.multipin;
   toggles.cameraMonitor.checked = !!status.cameraMonitor;
   toggles.moderation.checked = !!status.moderation;
   toggles.waitingRoom.checked = !!status.waitingRoom;
+  moderationDryRunToggle.checked = !!status.moderationDryRun;
 
   // Show pinned participants list
   const pinned = Array.isArray(status.pinned) ? status.pinned : [];
@@ -126,7 +140,9 @@ function _updateDiagnostics(status) {
 
   if (status.lastEvent) {
     const { type, payload, ts } = status.lastEvent;
-    diagLastEvent.textContent = `${type}${payload?.name ? ` — ${payload.name}` : ''}`;
+    const subject = payload?.name || payload?.sender;
+    const dryRun = payload?.dryRun ? ' (dry run)' : '';
+    diagLastEvent.textContent = `${type}${subject ? ` — ${subject}` : ''}${dryRun}`;
     diagLastEvent.className = 'diag-val ok';
     if (ts) {
       const ago = Math.round((Date.now() - ts) / 1000);
