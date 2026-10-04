@@ -57,13 +57,14 @@ function _readParticipantName(row) {
 }
 
 function setRules(options = {}) {
-  const allowedNames = Array.isArray(options.allowedNames)
-    ? [...new Set(options.allowedNames.map(_normaliseName).filter(Boolean))]
+  const safeOptions = options && typeof options === 'object' ? options : {};
+  const allowedNames = Array.isArray(safeOptions.allowedNames)
+    ? [...new Set(safeOptions.allowedNames.map(_normaliseName).filter(Boolean))]
     : [];
 
   _rules = {
-    autoAdmit: options.autoAdmit === true,
-    hostCapable: options.hostCapable === true,
+    autoAdmit: safeOptions.autoAdmit === true,
+    hostCapable: safeOptions.hostCapable === true,
     allowedNames,
   };
   _attempted.clear();
@@ -189,7 +190,8 @@ async function admit(name) {
  * @returns {Promise<boolean>}
  */
 async function admitAll(options = {}) {
-  if (!_enabled || !_rules.hostCapable || options.confirmed !== true) return false;
+  const confirmed = options && typeof options === 'object' && options.confirmed === true;
+  if (!_enabled || !_rules.hostCapable || !confirmed) return false;
   dbg('admitAll');
   if (typeof ZoomAdapter.admitAll === 'function') {
     return ZoomAdapter.admitAll();

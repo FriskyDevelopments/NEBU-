@@ -116,6 +116,44 @@ test('duplicate names and invalid rules fail closed', async (t) => {
   waitingRoom.disable();
 });
 
+test('missing host capability and malformed options fail closed', async (t) => {
+  const originalAdmit = ZoomAdapter.admitParticipant;
+  const originalAdmitAll = ZoomAdapter.admitAll;
+  t.after(() => {
+    ZoomAdapter.admitParticipant = originalAdmit;
+    ZoomAdapter.admitAll = originalAdmitAll;
+    delete global.document;
+    delete global.MutationObserver;
+  });
+
+  const triggerMutation = setup([participant('Alice')]);
+  let admissionCount = 0;
+  ZoomAdapter.admitParticipant = async () => {
+    admissionCount += 1;
+    return true;
+  };
+  ZoomAdapter.admitAll = async () => {
+    admissionCount += 1;
+    return true;
+  };
+
+  const waitingRoom = loadModule();
+  waitingRoom.enable({ autoAdmit: true, allowedNames: ['Alice'] });
+  triggerMutation();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(admissionCount, 0);
+
+  assert.doesNotThrow(() => waitingRoom.setRules(null));
+  assert.deepEqual(waitingRoom.getRules(), {
+    autoAdmit: false,
+    hostCapable: false,
+    allowedNames: [],
+  });
+  assert.equal(await waitingRoom.admitAll(null), false);
+  assert.equal(admissionCount, 0);
+  waitingRoom.disable();
+});
+
 test('manual bulk admission requires explicit confirmation', async (t) => {
   const originalAdmitAll = ZoomAdapter.admitAll;
   t.after(() => {
