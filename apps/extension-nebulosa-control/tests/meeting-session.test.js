@@ -73,6 +73,7 @@ test('meeting_ended clears multipin and camera-monitor bot session state', () =>
   let intervalCb = null;
   let clearedInterval = false;
   global.window = {
+    addEventListener() {},
     setInterval(cb) {
       intervalCb = cb;
       return 7;
