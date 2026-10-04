@@ -6,7 +6,7 @@ Nebulosa Control is a Manifest V3 browser extension that automates host actions 
 
 - **Multipin** — Automatically pins participants who raise their hand while their camera is on. Unpins them after 60 seconds if their camera turns off.
 - **Camera Monitor** — Tracks how long participants have their cameras off.
-- **Moderation** *(scaffold)* — Detects chat messages containing blocked keywords.
+- **Moderation** — Detects blocked keywords and mutes or removes the sender.
 - **Waiting Room** *(scaffold)* — Architecture boundary for future auto-admit logic.
 
 ---
@@ -65,15 +65,22 @@ Nebulosa Control is a Manifest V3 browser extension that automates host actions 
 - Sends at most one successful reminder per camera-off period and retries on the next check when Zoom's chat UI is unavailable
 - Emits `camera_reminder_due`, `camera_reminder_sent`, and `camera_reminder_failed` events for observability
 
-### Moderation 🔲 (Scaffold)
+### Moderation ✅
 
 - Subscribes to `chat_message` events
 - Runs messages through a configurable keyword list
-- Emits `moderation_triggered` with the proposed action when a keyword is found
-- Removes the matching participant through the Zoom adapter by default
+- Supports configurable `mute` and `remove` actions (default: `remove`)
+- Uses exact participant display-name matching before acting
+- Emits `moderation_triggered` when a keyword is found and
+  `moderation_action_completed` with the adapter result
 - The **Moderation dry run** popup toggle persists across sessions and reports
-  actions without changing the meeting
+  actions (as `moderation_triggered` with `dryRun: true`) without changing the meeting
 - Code integrations can also use `enable({ dryRun: true })` or `setDryRun(true)`
+- Requires host or co-host privileges in the meeting
+
+Configure `moderationBlockedKeywords` (an array of strings) and
+`moderationAction` (`mute` or `remove`) in extension sync storage. Empty
+keywords are ignored and `remove` is the default action.
 
 ### Waiting Room 🔲 (Scaffold)
 

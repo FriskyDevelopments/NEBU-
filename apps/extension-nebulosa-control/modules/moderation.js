@@ -1,24 +1,12 @@
 /**
  * Moderation Module — apps/extension-nebulosa-control/modules/moderation.js
  *
- * Chat moderation scaffold for Zoom meetings.
+ * Chat moderation for Zoom meetings.
  *
- * Status: SCAFFOLD — The original Tampermonkey/Puppeteer implementation
- * monitored Zoom chat messages for configurable keywords and could remove
- * participants. Full DOM-based chat moderation requires validation of
- * the Zoom Web Client chat selectors in extension mode.
+ * Subscribes to chat messages, matches configured blocked keywords, and
+ * delegates the configured mute or remove action to ZoomAdapter.
  *
- * What is implemented:
- *  - Subscribes to chat_message events from the event bus
- *  - Runs messages through a configurable keyword filter
- *  - Emits a moderation_triggered event with details
- *  - Supports a dry-run mode that reports actions without executing them
- *
- * What still needs validation / implementation:
- *  - Validate participant removal against current Zoom Web Client selectors
- *  - Private message sending via DOM (TODO below)
- *
- * See docs/tampermonkey-migration.md for full status.
+ * Supports a dry-run mode that reports the proposed action without executing it.
  */
 
 /* global window */
@@ -42,26 +30,33 @@ function dbg(...args) {
 
 // ── Default keyword list ──────────────────────────────────────────────────────
 const DEFAULT_BLOCKED_KEYWORDS = [];
+const ACTIONS = Object.freeze({
+  MUTE: 'mute',
+  REMOVE: 'remove',
+});
+const DEFAULT_ACTION = ACTIONS.REMOVE;
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let _enabled = false;
 let _dryRun = false;
 let _blockedKeywords = [...DEFAULT_BLOCKED_KEYWORDS];
+let _action = DEFAULT_ACTION;
 const _unsubs = [];
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
 function enable(options = {}) {
+  if (Array.isArray(options.blockedKeywords)) {
+    setKeywords(options.blockedKeywords);
+  }
+  if (options.action !== undefined) setAction(options.action);
   if (_enabled) return;
   _enabled = true;
   if (typeof options.dryRun === 'boolean') {
     _dryRun = options.dryRun;
   }
-  if (Array.isArray(options.blockedKeywords)) {
-    _blockedKeywords = options.blockedKeywords.map((k) => String(k).toLowerCase());
-  }
   _subscribe();
-  dbg('enabled — keywords:', _blockedKeywords, 'dry run:', _dryRun);
+  dbg('enabled — keywords:', _blockedKeywords, 'action:', _action, 'dry run:', _dryRun);
 }
 
 function disable() {
@@ -88,10 +83,26 @@ function setDryRun(dryRun) {
 function setKeywords(keywords) {
   if (!Array.isArray(keywords)) {
     dbg('setKeywords: expected an array, got', typeof keywords);
-    return;
+    return false;
   }
-  _blockedKeywords = keywords.map((k) => String(k).toLowerCase());
+  _blockedKeywords = [...new Set(
+    keywords
+      .map((keyword) => String(keyword).trim().toLowerCase())
+      .filter(Boolean)
+  )];
   dbg('keywords updated:', _blockedKeywords);
+  return true;
+}
+
+function setAction(action) {
+  const normalized = String(action).trim().toLowerCase();
+  if (!Object.values(ACTIONS).includes(normalized)) {
+    dbg('setAction: expected "mute" or "remove", got', action);
+    return false;
+  }
+  _action = normalized;
+  dbg('action updated:', _action);
+  return true;
 }
 
 // ── Internal ──────────────────────────────────────────────────────────────────
@@ -112,43 +123,47 @@ async function _onChatMessage({ sender, text }) {
   if (!matched) return;
 
   dbg('moderation triggered — sender:', sender, 'keyword:', matched);
-  const action = 'remove_participant';
+  const details = { sender, text, keyword: matched, action: _action };
   bus.emit('moderation_triggered', {
-    sender,
-    text,
-    keyword: matched,
-    action,
+    ...details,
+    action: _action === ACTIONS.MUTE ? 'mute_participant' : 'remove_participant',
     dryRun: _dryRun,
   });
 
   if (_dryRun) {
-    dbg('dry run — skipped action:', action, 'target:', sender);
+    dbg('dry run — skipped action:', _action, 'target:', sender);
     return 'DRY_RUN';
   }
 
-  // DOM action to remove the participant.
-  if (ZoomAdapter && typeof ZoomAdapter.removeParticipant === 'function') {
-    try {
-      const result = await ZoomAdapter.removeParticipant(sender);
-      dbg('removeParticipant action result:', result);
-    } catch (err) {
-      dbg('removeParticipant failed:', err.message);
-      return false;
+  const adapterMethod = _action === ACTIONS.MUTE
+    ? 'muteParticipant'
+    : 'removeParticipant';
+  let result = 'ACTION_UNAVAILABLE';
+  try {
+    if (ZoomAdapter && typeof ZoomAdapter[adapterMethod] === 'function') {
+      result = await ZoomAdapter[adapterMethod](sender);
     }
-  } else {
-    dbg('ZoomAdapter.removeParticipant not available');
-    return false;
+  } catch (err) {
+    result = 'ERROR';
+    dbg(`${adapterMethod} failed:`, err.message);
   }
+
+  const ok = result === 'MUTED' || result === 'REMOVED';
+  bus.emit('moderation_action_completed', { ...details, result, ok });
+  dbg(`${adapterMethod} action result:`, result);
+  return ok;
 }
 
 // CommonJS + browser-global dual export
 const ModerationModule = {
+  ACTIONS,
   enable,
   disable,
   isEnabled,
   isDryRun,
   setDryRun,
   setKeywords,
+  setAction,
 };
 
 if (typeof module !== 'undefined' && module.exports) {

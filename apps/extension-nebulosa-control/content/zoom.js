@@ -29,6 +29,8 @@
     cameraMonitorEnabled: false,
     moderationEnabled: false,
     moderationDryRun: false,
+    moderationBlockedKeywords: [],
+    moderationAction: 'remove',
     waitingRoomEnabled: false,
   };
 
@@ -195,7 +197,11 @@
     if (settings.multipinEnabled) MultipinModule.enable();
     if (settings.cameraMonitorEnabled) CameraMonitorModule.enable();
     if (settings.moderationEnabled) {
-      ModerationModule.enable({ dryRun: settings.moderationDryRun });
+      ModerationModule.enable({
+        blockedKeywords: settings.moderationBlockedKeywords,
+        action: settings.moderationAction,
+        dryRun: settings.moderationDryRun,
+      });
     } else {
       ModerationModule.setDryRun(settings.moderationDryRun);
     }
@@ -220,6 +226,7 @@
       _endBotSession((payload && payload.reason) || 'meeting_ended');
     });
     bus.on('host_action_history_changed', _sendStatus);
+    bus.on('moderation_action_completed', _trackEvent('moderation_action_completed'));
 
     _sendStatus();
   }
