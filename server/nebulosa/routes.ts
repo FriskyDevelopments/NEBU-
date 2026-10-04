@@ -115,7 +115,7 @@ export function registerNebulosaRoutes(app: Express) {
   app.post("/api/v1/commands/:commandId/retry", requireAuth("command:write"), (req, res) => {
     try {
       const operator = (req as any).operator;
-      const command = retryFailedCommand(req.params.commandId, operator.username);
+      const command = retryFailedCommand(req.params.commandId as string, operator.username);
       if (!command) return res.status(404).json({ code: "not_found", message: "Command not found." });
       res.json(command);
     } catch (error) {

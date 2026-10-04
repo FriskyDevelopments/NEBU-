@@ -16,7 +16,7 @@ function createLockCommand() {
     type: "session.lock_room",
     payload: { sessionId: "session-main" },
     ttlSeconds: 180,
-  });
+  }).command;
 }
 
 function failRunningJob(commandId: string, error: string) {

@@ -11,7 +11,7 @@
     "client:build": "vite build",
     "client:preview": "vite preview",
     "test": "node --import tsx --test tests/node/**/*.test.ts",
-    "typecheck:bot": "tsc --noEmit --strict --skipLibCheck --esModuleInterop --moduleResolution node --module commonjs --target es2022 server/nebulosa/contracts.ts server/nebulosa/state.ts server/nebulosa/config.ts server/nebulosa/service.ts server/nebulosa/telegram.ts server/nebulosa/routes.ts tests/node/command-idempotency.test.ts"
+    "typecheck:bot": "tsc --noEmit --allowImportingTsExtensions --strict --skipLibCheck --esModuleInterop --moduleResolution node --module commonjs --target es2022 server/nebulosa/contracts.ts server/nebulosa/state.ts server/nebulosa/config.ts server/nebulosa/service.ts server/nebulosa/telegram.ts server/nebulosa/routes.ts tests/node/command-idempotency.test.ts"
   },
   "keywords": [
     "telegram",
