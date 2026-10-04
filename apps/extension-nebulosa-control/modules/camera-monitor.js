@@ -110,6 +110,9 @@ function _subscribe() {
       _cameraOffSince.delete(name);
       _reminded.delete(name);
     }),
+    bus.on('meeting_ended', () => {
+      disable();
+    }),
   );
 }
 

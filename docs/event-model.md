@@ -67,11 +67,13 @@ The content script detected an active Zoom meeting page. *(reserved — not yet 
 ```
 
 ### `meeting_ended`
-The meeting ended or the user left. *(reserved — not yet emitted)*
+The meeting ended or the user left. Emitted by the extension Zoom adapter when the ended banner is detected.
 
 ```js
-{}
+{ reason: 'meeting_ended' }
 ```
+
+Multipin, camera monitor, and moderation clear their in-meeting bot session (pins, camera-off grace timers, reminder tracking, keyword listener). The content script then destroys the adapter so DOM observers stop, and it will not arm a new session until the page leaves the ended state.
 
 ---
 
