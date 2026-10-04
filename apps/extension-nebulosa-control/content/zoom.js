@@ -219,6 +219,7 @@
       _lastEvent = { type: 'meeting_ended', payload: payload || {}, ts: Date.now() };
       _endBotSession((payload && payload.reason) || 'meeting_ended');
     });
+    bus.on('host_action_history_changed', _sendStatus);
 
     _sendStatus();
   }
@@ -289,6 +290,9 @@
         sendResponse({ ok: true });
         return false;
       }
+      case 'UNDO_HOST_ACTION':
+        ZoomAdapter.undoLastHostAction().then(sendResponse);
+        return true;
       default:
         sendResponse({ ok: false, error: 'Unknown message type' });
         return false;
@@ -317,6 +321,7 @@
       lastEvent: _lastEvent,
       lastFailureReason: _lastFailureReason,
       selectorFailures: diag.selectorFailures || {},
+      undo: ZoomAdapter.getUndoState ? ZoomAdapter.getUndoState() : { canUndo: false, action: null },
     };
   }
 

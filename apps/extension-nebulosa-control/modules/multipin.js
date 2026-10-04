@@ -105,6 +105,7 @@ function _subscribe() {
     bus.on('meeting_ended', () => {
       disable();
     }),
+    bus.on('host_action_undone', _onHostActionUndone),
   );
 }
 
@@ -184,6 +185,12 @@ function _onParticipantLeft({ name }) {
     window.clearTimeout(_cameraOffTimers.get(name));
     _cameraOffTimers.delete(name);
   }
+}
+
+function _onHostActionUndone({ action }) {
+  if (!action || !action.name) return;
+  if (action.type === 'pin') _pinned.delete(action.name);
+  if (action.type === 'unpin') _pinned.add(action.name);
 }
 
 async function _pin(name) {
