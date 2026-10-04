@@ -85,7 +85,7 @@ docs/
 | Feature | Status | Description |
 |---|---|---|
 | Multipin | ✅ Implemented | Auto-pin on hand raise + camera on. 60s grace on camera off. |
-| Camera Monitor | ⚡ Partial | Tracks camera-off duration. Reminder sending TBD. |
+| Camera Monitor | ✅ Implemented | Sends a private reminder after 5 minutes camera-off. |
 | Moderation | 🔲 Scaffold | Chat keyword detection. Mute/remove action TBD. |
 | Waiting Room | 🔲 Scaffold | Architecture boundary. Auto-admit rules TBD. |
 
@@ -281,7 +281,7 @@ The repository now includes a production-oriented Nebulosa control surface under
 ### Environment variables
 Names only. `NEBULOSA_ENV` takes `dev`, `staging` or `prod`.
 
-`NEBULOSA_ENV` · `NEBULOSA_SESSION_SECRET` · `NEBULOSA_EXECUTOR_SECRET` · `NEBULOSA_OPERATOR_ALLOWLIST` · `NEBULOSA_ADMIN_PASSWORD` · `NEBULOSA_OPERATOR_PASSWORD` · `NEBULOSA_VIEWER_PASSWORD` · `NEBULOSA_FAILED_COMMAND_THRESHOLD`
+`NEBULOSA_ENV` · `NEBULOSA_SESSION_SECRET` · `NEBULOSA_EXECUTOR_SECRET` · `NEBULOSA_OPERATOR_ALLOWLIST` · `NEBULOSA_ADMIN_PASSWORD` · `NEBULOSA_OPERATOR_PASSWORD` · `NEBULOSA_VIEWER_PASSWORD` · `NEBULOSA_FAILED_COMMAND_THRESHOLD` · `NEBULOSA_COMMAND_MAX_ATTEMPTS`
 
 > ⚠️ Always set the three `*_PASSWORD` variables explicitly. `server/nebulosa/state.ts` falls back to built-in default passwords when they are missing.
 
@@ -292,9 +292,11 @@ Names only. `NEBULOSA_ENV` takes `dev`, `staging` or `prod`.
 - `GET /api/v1/commands`
 - `POST /api/v1/commands`
 - `POST /api/v1/commands/:commandId/cancel`
+- `POST /api/v1/commands/:commandId/retry` (requeue a terminally failed executor job)
 - `POST /api/v1/executor/heartbeat` (signed via `x-nebulosa-signature`)
 - `POST /api/v1/executor/claim`
 - `POST /api/v1/executor/report`
+- `GET /api/v1/executor/jobs/failed` (failed and retrying jobs, with attempt history)
 - `GET /api/v1/alerts`
 - `GET /api/v1/audit`
 - `GET /api/v1/executors`

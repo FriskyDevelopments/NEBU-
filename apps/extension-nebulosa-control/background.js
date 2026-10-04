@@ -26,8 +26,10 @@ let _lastStatus = {
   multipin: false,
   cameraMonitor: false,
   moderation: false,
+  moderationDryRun: false,
   waitingRoom: false,
   pinned: [],
+  undo: { canUndo: false, action: null },
   surface: 'unknown',
   meetingState: 'unknown',
   role: 'unknown',
@@ -52,8 +54,10 @@ function _resetStatus() {
     multipin: false,
     cameraMonitor: false,
     moderation: false,
+    moderationDryRun: false,
     waitingRoom: false,
     pinned: [],
+    undo: { canUndo: false, action: null },
     surface: 'unknown',
     meetingState: 'unknown',
     role: 'unknown',
@@ -115,8 +119,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
-  if (message.type === 'TOGGLE_MODULE') {
-    // Popup toggling a module — forward to the tracked active Zoom tab
+  if (message.type === 'TOGGLE_MODULE' || message.type === 'SET_MODERATION_DRY_RUN' || message.type === 'UNDO_HOST_ACTION') {
+    // Popup action — forward to the tracked active Zoom tab
     _forwardToZoomTab(message, sendResponse);
     return true; // async response
   }

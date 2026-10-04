@@ -1,19 +1,34 @@
 import crypto from "crypto";
 import type { Request, Response, NextFunction } from "express";
-import { config, signExecutorNonce } from "./config";
+import { config, signExecutorNonce } from "./config.ts";
 import {
   claimCommandSchema,
   commandExecutionSchema,
   commandStatusSchema,
   createCommandSchema,
   heartbeatSchema,
+  idempotencyKeySchema,
   loginSchema,
   type CommandRecord,
   type OperatorRole,
-} from "./contracts";
-import { nebulosaState } from "./state";
+} from "./contracts.ts";
+import {
+  applyExecutorFailure,
+  listVisibleFailedJobs,
+  nextExpiryIso,
+  planManualRetry,
+  type ExecutorJobSnapshot,
+} from "./executor-retries.ts";
+import { nebulosaState } from "./state.ts";
 
 const terminalStatuses = new Set(["succeeded", "failed", "expired", "cancelled"]);
+
+export class IdempotencyConflictError extends Error {
+  constructor() {
+    super("Idempotency key was already used for a different command");
+    this.name = "IdempotencyConflictError";
+  }
+}
 
 const statusTransitions: Record<string, string[]> = {
   pending: ["claimed", "expired", "cancelled"],
@@ -127,8 +142,48 @@ export function requireAuth(permission: "command:write" | "command:cancel" | "co
   };
 }
 
-export function createCommand(requestedBy: string, input: unknown): CommandRecord {
+function commandFingerprint(payload: ReturnType<typeof createCommandSchema.parse>): string {
+  const metadata = payload.payload.metadata
+    ? Object.fromEntries(Object.entries(payload.payload.metadata).sort(([left], [right]) => left.localeCompare(right)))
+    : undefined;
+
+  return JSON.stringify({
+    type: payload.type,
+    payload: { ...payload.payload, metadata },
+    ttlSeconds: payload.ttlSeconds,
+  });
+}
+
+export function createCommand(
+  requestedBy: string,
+  input: unknown,
+  idempotencyKey?: string,
+): { command: CommandRecord; created: boolean } {
   const payload = createCommandSchema.parse(input);
+  const parsedIdempotencyKey = idempotencyKey === undefined
+    ? undefined
+    : idempotencyKeySchema.parse(idempotencyKey);
+  const scopedIdempotencyKey = parsedIdempotencyKey
+    ? crypto.createHash("sha256").update(`${requestedBy}\0${parsedIdempotencyKey}`).digest("hex")
+    : undefined;
+  const fingerprint = commandFingerprint(payload);
+
+  if (scopedIdempotencyKey) {
+    const existing = nebulosaState.commandIdempotency.get(scopedIdempotencyKey);
+    if (existing) {
+      if (existing.fingerprint !== fingerprint) {
+        throw new IdempotencyConflictError();
+      }
+
+      const command = nebulosaState.commands.get(existing.commandId);
+      if (command) {
+        return { command, created: false };
+      }
+
+      nebulosaState.commandIdempotency.delete(scopedIdempotencyKey);
+    }
+  }
+
   const now = new Date();
   const expiresAt = new Date(now.getTime() + payload.ttlSeconds * 1000);
 
@@ -143,6 +198,9 @@ export function createCommand(requestedBy: string, input: unknown): CommandRecor
     executorId: null,
     result: null,
     error: null,
+    attempt: 1,
+    maxAttempts: config.commandMaxAttempts,
+    failures: [],
     auditMetadata: {
       ttlSeconds: String(payload.ttlSeconds),
       source: "operator-ui",
@@ -150,15 +208,24 @@ export function createCommand(requestedBy: string, input: unknown): CommandRecor
   };
 
   nebulosaState.commands.set(cmd.id, cmd);
+  if (scopedIdempotencyKey) {
+    nebulosaState.commandIdempotency.set(scopedIdempotencyKey, {
+      commandId: cmd.id,
+      fingerprint,
+    });
+  }
   nebulosaState.addAudit({
     actor: requestedBy,
     event: "command.created",
     resourceType: "command",
     resourceId: cmd.id,
-    metadata: { type: cmd.type },
+    metadata: {
+      type: cmd.type,
+      ...(parsedIdempotencyKey ? { idempotent: "true" } : {}),
+    },
   });
 
-  return cmd;
+  return { command: cmd, created: true };
 }
 
 export function claimCommand(input: unknown) {
@@ -203,6 +270,10 @@ export function updateCommandExecution(input: unknown) {
     throw new Error(`Invalid transition ${command.status} -> ${payload.status}`);
   }
 
+  if (payload.status === "failed") {
+    return recordExecutorFailure(command, payload.executorId, payload.error);
+  }
+
   command.status = payload.status;
   command.executorId = payload.executorId;
   if (payload.result) command.result = payload.result;
@@ -216,18 +287,80 @@ export function updateCommandExecution(input: unknown) {
     metadata: { status: command.status },
   });
 
-  if (payload.status === "failed") {
-    const failedCount = [...nebulosaState.commands.values()].filter((cmd) => cmd.status === "failed").length;
-    if (failedCount >= config.failedCommandThreshold) {
-      nebulosaState.addAlert({
-        severity: "critical",
-        code: "FAILED_COMMAND_THRESHOLD",
-        message: `${failedCount} commands failed. Investigate executor health.`,
-      });
-    }
+  return command;
+}
+
+function recordExecutorFailure(command: CommandRecord, executorId: string, error: string | undefined) {
+  const decision = applyExecutorFailure(command, {
+    error,
+    executorId,
+    failedAt: new Date().toISOString(),
+  });
+
+  if (decision.action === "requeue") {
+    command.expiresAt = nextExpiryIso(command.auditMetadata.ttlSeconds, Date.now());
+    nebulosaState.addAudit({
+      actor: executorId,
+      event: "command.retry_scheduled",
+      resourceType: "command",
+      resourceId: command.id,
+      metadata: {
+        status: command.status,
+        attempt: String(command.attempt),
+        maxAttempts: String(command.maxAttempts),
+        error: decision.error,
+      },
+    });
+    nebulosaState.addAlert({
+      severity: "warning",
+      code: "EXECUTOR_JOB_RETRY",
+      message: `Command ${command.id} failed on attempt ${decision.failure.attempt}/${command.maxAttempts} and was requeued. ${decision.error}`,
+    });
+    return command;
+  }
+
+  nebulosaState.addAudit({
+    actor: executorId,
+    event: "command.failed",
+    resourceType: "command",
+    resourceId: command.id,
+    metadata: {
+      status: command.status,
+      attempt: String(command.attempt),
+      maxAttempts: String(command.maxAttempts),
+      error: decision.error,
+    },
+  });
+
+  const failedCount = [...nebulosaState.commands.values()].filter((cmd) => cmd.status === "failed").length;
+  if (failedCount >= config.failedCommandThreshold) {
+    nebulosaState.addAlert({
+      severity: "critical",
+      code: "FAILED_COMMAND_THRESHOLD",
+      message: `${failedCount} commands failed. Investigate executor health.`,
+    });
   }
 
   return command;
+}
+
+function toExecutorJobSnapshot(command: CommandRecord): ExecutorJobSnapshot {
+  return {
+    id: command.id,
+    type: command.type,
+    status: command.status,
+    attempt: command.attempt,
+    maxAttempts: command.maxAttempts,
+    executorId: command.executorId,
+    error: command.error,
+    requestedBy: command.requestedBy,
+    createdAt: command.createdAt,
+    failures: command.failures,
+  };
+}
+
+export function listFailedExecutorJobs() {
+  return listVisibleFailedJobs([...nebulosaState.commands.values()].map(toExecutorJobSnapshot));
 }
 
 export function registerHeartbeat(input: unknown, signature: string | undefined) {
@@ -286,8 +419,9 @@ export function healthSnapshot() {
     });
   }
 
+  const failedJobs = listFailedExecutorJobs();
   const pendingLong = [...nebulosaState.commands.values()].filter(
-    (cmd) => cmd.status === "pending" && now - new Date(cmd.createdAt).getTime() > 120_000,
+    (cmd) => cmd.status === "pending" && cmd.failures.length === 0 && now - new Date(cmd.createdAt).getTime() > 120_000,
   );
 
   if (pendingLong.length > 0) {
@@ -309,7 +443,9 @@ export function healthSnapshot() {
       pending: nebulosaState.commandCounts("pending"),
       running: nebulosaState.commandCounts("running"),
       failed: nebulosaState.commandCounts("failed"),
+      retrying: failedJobs.filter((job) => job.phase === "retrying").length,
     },
+    failedJobs: failedJobs.slice(0, 20),
     alerts: nebulosaState.alerts.filter((alert) => alert.resolvedAt === null).length,
   };
 }
@@ -335,5 +471,36 @@ export function cancelCommand(commandId: string, actor: string) {
     resourceId: command.id,
     metadata: {},
   });
+  return command;
+}
+
+export function retryFailedCommand(commandId: string, actor: string) {
+  const command = nebulosaState.commands.get(commandId);
+  if (!command) return null;
+
+  const plan = planManualRetry({
+    status: command.status,
+    attempt: command.attempt,
+    maxAttempts: command.maxAttempts,
+  });
+
+  command.status = "pending";
+  command.attempt = plan.attempt;
+  command.maxAttempts = plan.maxAttempts;
+  command.executorId = null;
+  command.result = null;
+  command.expiresAt = nextExpiryIso(command.auditMetadata.ttlSeconds, Date.now());
+
+  nebulosaState.addAudit({
+    actor,
+    event: "command.manual_retry",
+    resourceType: "command",
+    resourceId: command.id,
+    metadata: {
+      attempt: String(command.attempt),
+      maxAttempts: String(command.maxAttempts),
+    },
+  });
+
   return command;
 }

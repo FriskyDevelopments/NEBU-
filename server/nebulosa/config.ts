@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { clampMaxAttempts } from "./executor-retries.ts";
 
 export type Environment = "dev" | "staging" | "prod";
 
@@ -19,6 +20,7 @@ export const config = {
   sessionSecret: process.env.NEBULOSA_SESSION_SECRET ?? defaultSessionSecret,
   executorSharedSecret: process.env.NEBULOSA_EXECUTOR_SECRET ?? "local-executor-secret",
   failedCommandThreshold: Number(process.env.NEBULOSA_FAILED_COMMAND_THRESHOLD ?? 5),
+  commandMaxAttempts: clampMaxAttempts(Number(process.env.NEBULOSA_COMMAND_MAX_ATTEMPTS ?? 3)),
 };
 
 if (config.environment === "prod" && config.sessionSecret === defaultSessionSecret) {
