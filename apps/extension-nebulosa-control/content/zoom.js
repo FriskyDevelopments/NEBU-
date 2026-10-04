@@ -27,6 +27,8 @@
     multipinEnabled: true,
     cameraMonitorEnabled: false,
     moderationEnabled: false,
+    moderationBlockedKeywords: [],
+    moderationAction: 'remove',
     waitingRoomEnabled: false,
   };
 
@@ -163,7 +165,12 @@
 
     if (settings.multipinEnabled) MultipinModule.enable();
     if (settings.cameraMonitorEnabled) CameraMonitorModule.enable();
-    if (settings.moderationEnabled) ModerationModule.enable();
+    if (settings.moderationEnabled) {
+      ModerationModule.enable({
+        blockedKeywords: settings.moderationBlockedKeywords,
+        action: settings.moderationAction,
+      });
+    }
     if (settings.waitingRoomEnabled) WaitingRoomModule.enable();
 
     const role = capabilities.role;
@@ -180,6 +187,7 @@
     bus.on('camera_on', _trackEvent('camera_on'));
     bus.on('camera_off', _trackEvent('camera_off'));
     bus.on('moderation_triggered', _trackEvent('moderation_triggered'));
+    bus.on('moderation_action_completed', _trackEvent('moderation_action_completed'));
 
     _sendStatus();
   }

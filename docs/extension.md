@@ -6,7 +6,7 @@ Nebulosa Control is a Manifest V3 browser extension that automates host actions 
 
 - **Multipin** — Automatically pins participants who raise their hand while their camera is on. Unpins them after 60 seconds if their camera turns off.
 - **Camera Monitor** — Tracks how long participants have their cameras off.
-- **Moderation** *(scaffold)* — Detects chat messages containing blocked keywords.
+- **Moderation** — Detects blocked keywords and mutes or removes the sender.
 - **Waiting Room** *(scaffold)* — Architecture boundary for future auto-admit logic.
 
 ---
@@ -64,12 +64,19 @@ Nebulosa Control is a Manifest V3 browser extension that automates host actions 
 - After a configurable threshold (default: 5 minutes), emits a `camera_reminder_due` event
 - **TODO:** Actually sending a Zoom chat reminder requires DOM automation that is not yet validated in extension mode. See `modules/camera-monitor.js` for the TODO comment.
 
-### Moderation 🔲 (Scaffold)
+### Moderation ✅
 
 - Subscribes to `chat_message` events
 - Runs messages through a configurable keyword list
-- Emits `moderation_triggered` when a keyword is found
-- **TODO:** The "mute/remove participant" DOM action is not yet implemented. See `modules/moderation.js`.
+- Supports configurable `mute` and `remove` actions (default: `remove`)
+- Uses exact participant display-name matching before acting
+- Emits `moderation_triggered` when a keyword is found and
+  `moderation_action_completed` with the adapter result
+- Requires host or co-host privileges in the meeting
+
+Configure `moderationBlockedKeywords` (an array of strings) and
+`moderationAction` (`mute` or `remove`) in extension sync storage. Empty
+keywords are ignored and `remove` is the default action.
 
 ### Waiting Room 🔲 (Scaffold)
 
