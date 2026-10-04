@@ -71,11 +71,23 @@ Nebulosa Control is a Manifest V3 browser extension that automates host actions 
 - Emits `moderation_triggered` when a keyword is found
 - **TODO:** The "mute/remove participant" DOM action is not yet implemented. See `modules/moderation.js`.
 
-### Waiting Room 🔲 (Scaffold)
+### Waiting Room ✅
 
-- `admit(name)` is wired to `ZoomAdapter.admitParticipant()` which clicks the Admit button
-- `admitAll()` is a stub pending DOM validation
-- Auto-admit rules are not yet implemented
+- Auto-admit is fail-closed and requires host capability, `autoAdmit: true`, and an exact-name `allowedNames` list
+- Names are normalized for whitespace, case, and Unicode, but partial matches are never admitted
+- Duplicate visible names are treated as ambiguous and skipped
+- Each participant is attempted only once while present, preventing repeated clicks from DOM mutation bursts
+- Manual `admit(name)` requires the module to be enabled; `admitAll()` additionally requires `{ confirmed: true }`
+
+Example:
+
+```js
+window.NebulosaWaitingRoom.enable({
+  hostCapable: true,
+  autoAdmit: true,
+  allowedNames: ['Alice Example'],
+});
+```
 
 ---
 
