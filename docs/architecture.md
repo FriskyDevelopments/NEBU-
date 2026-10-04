@@ -72,7 +72,7 @@ packages/event-bus/index.js   (pub/sub: emit / on / off)
 modules/multipin.js   modules/camera-monitor.js  ...
    │
    ▼
-integrations/zoom/adapter.js  (host actions: pin, unpin)
+integrations/zoom/adapter.js  (host actions: pin, unpin + bounded undo history)
    │
    ▼
 Zoom Web Client DOM
@@ -112,6 +112,7 @@ The background worker caches the last known status so the popup always has data 
 3. **Preserved behaviour** — The original working multipin logic from `zoomBrowserBot.js` is preserved and wrapped, not rewritten.
 4. **No fake completeness** — Scaffold modules are clearly marked with TODOs and `SCAFFOLD` status.
 5. **Cross-browser readiness** — Extension code currently targets Chrome `chrome.*` APIs; cross-browser support for Firefox/Safari will be added via a standard `browser.*`-style wrapper/polyfill. The DOM logic uses standard Web APIs.
+6. **Safe undo** — Successful reversible host actions (pin and unpin) expose their inverse in the popup. Irreversible actions are never added to undo history.
 
 ---
 

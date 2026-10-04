@@ -14,6 +14,8 @@ const statusDot = document.getElementById('status-dot');
 const statusText = document.getElementById('status-text');
 const pinnedList = document.getElementById('pinned-list');
 const pinnedNames = document.getElementById('pinned-names');
+const undoButton = document.getElementById('undo-host-action');
+const undoResult = document.getElementById('undo-result');
 
 // Diagnostics
 const diagToggleBtn = document.getElementById('diag-toggle');
@@ -78,6 +80,19 @@ Object.entries(toggles).forEach(([mod, input]) => {
   });
 });
 
+undoButton.addEventListener('click', () => {
+  undoButton.disabled = true;
+  undoResult.textContent = 'Undoing…';
+  chrome.runtime.sendMessage({ type: 'UNDO_HOST_ACTION' }, (response) => {
+    if (chrome.runtime.lastError || !response || !response.ok) {
+      undoResult.textContent = 'Undo failed. The action is still available.';
+      undoButton.disabled = false;
+      return;
+    }
+    undoResult.textContent = `Undid ${response.action.label}`;
+  });
+});
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function _applyStatus(status) {
@@ -102,6 +117,10 @@ function _applyStatus(status) {
   } else {
     pinnedList.classList.add('hidden');
   }
+
+  const undo = status.undo || { canUndo: false, action: null };
+  undoButton.disabled = !undo.canUndo;
+  undoButton.textContent = undo.action ? `Undo ${undo.action.label}` : 'Nothing to undo';
 
   // Diagnostics
   _updateDiagnostics(status);

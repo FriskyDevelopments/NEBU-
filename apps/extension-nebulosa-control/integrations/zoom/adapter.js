@@ -2,6 +2,7 @@
 
 const ZoomSelectors = typeof require !== 'undefined' ? require('./selectors') : window.ZoomSelectors;
 const ZoomEvents = typeof require !== 'undefined' ? require('./events') : window.ZoomEvents;
+const HostActionHistory = typeof require !== 'undefined' ? require('./host-action-history') : window.NebulosaHostActionHistory;
 const bus = typeof require !== 'undefined' ? require('../../packages/event-bus') : window.NebulosaBus;
 
 const DEBUG = typeof window !== 'undefined' && window.__NEBULOSA_DEBUG === true;
@@ -53,7 +54,7 @@ function _findMenuItem(container, textPattern) {
   return null;
 }
 
-async function pinParticipant(name) {
+async function pinParticipant(name, options = {}) {
   try {
     const tiles = _queryAll(ZoomSelectors.VIDEO_TILE);
     let targetTile = null;
@@ -72,6 +73,15 @@ async function pinParticipant(name) {
     if (!pinItem) pinItem = _findMenuItem(menu, ZoomSelectors.PIN_OPTION_TEXT);
     if (!pinItem) { document.body.click(); return 'PIN_OPTION_NOT_FOUND'; }
     pinItem.click();
+    if (options.recordUndo !== false) {
+      HostActionHistory.record({
+        type: 'pin',
+        name,
+        label: `Pin ${name}`,
+        undo: async () => (await unpinParticipant(name, { recordUndo: false })) === 'MULTIPIN_REMOVED',
+      });
+      bus.emit('host_action_history_changed', HostActionHistory.getState());
+    }
     return 'MULTIPIN_GRANTED';
   } catch (err) {
     console.error('[Nebulosa:ZoomAdapter] pinParticipant error:', err);
@@ -79,7 +89,7 @@ async function pinParticipant(name) {
   }
 }
 
-async function unpinParticipant(name) {
+async function unpinParticipant(name, options = {}) {
   try {
     const tiles = _queryAll(ZoomSelectors.VIDEO_TILE);
     let targetTile = null;
@@ -97,6 +107,15 @@ async function unpinParticipant(name) {
     const unpinItem = _findMenuItem(menu, ZoomSelectors.UNPIN_OPTION_TEXT);
     if (!unpinItem) { document.body.click(); return 'UNPIN_OPTION_NOT_FOUND'; }
     unpinItem.click();
+    if (options.recordUndo !== false) {
+      HostActionHistory.record({
+        type: 'unpin',
+        name,
+        label: `Unpin ${name}`,
+        undo: async () => (await pinParticipant(name, { recordUndo: false })) === 'MULTIPIN_GRANTED',
+      });
+      bus.emit('host_action_history_changed', HostActionHistory.getState());
+    }
     return 'MULTIPIN_REMOVED';
   } catch (err) {
     console.error('[Nebulosa:ZoomAdapter] unpinParticipant error:', err);
@@ -261,6 +280,7 @@ function init(options = {}) {
 function destroy() {
   window.__NEBULOSA_ADAPTER_LOADED__ = false;
   ZoomEvents.stop();
+  HostActionHistory.clear();
   bus.clear();
   dbg('destroyed');
 }
@@ -269,6 +289,28 @@ function getDiagnosticsSnapshot() {
   return ZoomEvents.getDiagnosticsSnapshot();
 }
 
-const ZoomAdapter = { init, destroy, pinParticipant, unpinParticipant, admitParticipant, removeParticipant, muteParticipant, getDiagnosticsSnapshot };
+function getUndoState() {
+  return HostActionHistory.getState();
+}
+
+async function undoLastHostAction() {
+  const result = await HostActionHistory.undoLast();
+  if (result.ok) bus.emit('host_action_undone', result);
+  bus.emit('host_action_history_changed', HostActionHistory.getState());
+  return result;
+}
+
+const ZoomAdapter = {
+  init,
+  destroy,
+  pinParticipant,
+  unpinParticipant,
+  admitParticipant,
+  removeParticipant,
+  muteParticipant,
+  getDiagnosticsSnapshot,
+  getUndoState,
+  undoLastHostAction,
+};
 if (typeof module !== 'undefined' && module.exports) module.exports = ZoomAdapter;
 else if (typeof window !== 'undefined') window.ZoomAdapter = ZoomAdapter;

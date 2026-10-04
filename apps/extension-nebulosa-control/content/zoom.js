@@ -180,6 +180,7 @@
     bus.on('camera_on', _trackEvent('camera_on'));
     bus.on('camera_off', _trackEvent('camera_off'));
     bus.on('moderation_triggered', _trackEvent('moderation_triggered'));
+    bus.on('host_action_history_changed', _sendStatus);
 
     _sendStatus();
   }
@@ -204,6 +205,9 @@
         sendResponse({ ok: true });
         return false;
       }
+      case 'UNDO_HOST_ACTION':
+        ZoomAdapter.undoLastHostAction().then(sendResponse);
+        return true;
       default:
         sendResponse({ ok: false, error: 'Unknown message type' });
         return false;
@@ -231,6 +235,7 @@
       lastEvent: _lastEvent,
       lastFailureReason: _lastFailureReason,
       selectorFailures: diag.selectorFailures || {},
+      undo: ZoomAdapter.getUndoState ? ZoomAdapter.getUndoState() : { canUndo: false, action: null },
     };
   }
 
