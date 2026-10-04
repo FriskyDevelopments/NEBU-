@@ -41,6 +41,11 @@ export type AuditEvent = {
   createdAt: string;
 };
 
+export type IdempotencyRecord = {
+  commandId: string;
+  fingerprint: string;
+};
+
 function hashPassword(password: string, salt: string): string {
   return crypto.scryptSync(password, salt, 64).toString("hex");
 }
@@ -60,6 +65,7 @@ export class NebulosaState {
   operators = new Map<string, Operator>();
   sessions = new Map<string, SessionRecord>();
   commands = new Map<string, CommandRecord>();
+  commandIdempotency = new Map<string, IdempotencyRecord>();
   executors = new Map<string, ExecutorRecord>();
   alerts: AlertRecord[] = [];
   audit: AuditEvent[] = [];

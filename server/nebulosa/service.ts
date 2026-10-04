@@ -7,6 +7,7 @@ import {
   commandStatusSchema,
   createCommandSchema,
   heartbeatSchema,
+  idempotencyKeySchema,
   loginSchema,
   type CommandRecord,
   type OperatorRole,
@@ -14,6 +15,13 @@ import {
 import { nebulosaState } from "./state";
 
 const terminalStatuses = new Set(["succeeded", "failed", "expired", "cancelled"]);
+
+export class IdempotencyConflictError extends Error {
+  constructor() {
+    super("Idempotency key was already used for a different command");
+    this.name = "IdempotencyConflictError";
+  }
+}
 
 const statusTransitions: Record<string, string[]> = {
   pending: ["claimed", "expired", "cancelled"],
@@ -127,8 +135,48 @@ export function requireAuth(permission: "command:write" | "command:cancel" | "co
   };
 }
 
-export function createCommand(requestedBy: string, input: unknown): CommandRecord {
+function commandFingerprint(payload: ReturnType<typeof createCommandSchema.parse>): string {
+  const metadata = payload.payload.metadata
+    ? Object.fromEntries(Object.entries(payload.payload.metadata).sort(([left], [right]) => left.localeCompare(right)))
+    : undefined;
+
+  return JSON.stringify({
+    type: payload.type,
+    payload: { ...payload.payload, metadata },
+    ttlSeconds: payload.ttlSeconds,
+  });
+}
+
+export function createCommand(
+  requestedBy: string,
+  input: unknown,
+  idempotencyKey?: string,
+): { command: CommandRecord; created: boolean } {
   const payload = createCommandSchema.parse(input);
+  const parsedIdempotencyKey = idempotencyKey === undefined
+    ? undefined
+    : idempotencyKeySchema.parse(idempotencyKey);
+  const scopedIdempotencyKey = parsedIdempotencyKey
+    ? crypto.createHash("sha256").update(`${requestedBy}\0${parsedIdempotencyKey}`).digest("hex")
+    : undefined;
+  const fingerprint = commandFingerprint(payload);
+
+  if (scopedIdempotencyKey) {
+    const existing = nebulosaState.commandIdempotency.get(scopedIdempotencyKey);
+    if (existing) {
+      if (existing.fingerprint !== fingerprint) {
+        throw new IdempotencyConflictError();
+      }
+
+      const command = nebulosaState.commands.get(existing.commandId);
+      if (command) {
+        return { command, created: false };
+      }
+
+      nebulosaState.commandIdempotency.delete(scopedIdempotencyKey);
+    }
+  }
+
   const now = new Date();
   const expiresAt = new Date(now.getTime() + payload.ttlSeconds * 1000);
 
@@ -150,15 +198,24 @@ export function createCommand(requestedBy: string, input: unknown): CommandRecor
   };
 
   nebulosaState.commands.set(cmd.id, cmd);
+  if (scopedIdempotencyKey) {
+    nebulosaState.commandIdempotency.set(scopedIdempotencyKey, {
+      commandId: cmd.id,
+      fingerprint,
+    });
+  }
   nebulosaState.addAudit({
     actor: requestedBy,
     event: "command.created",
     resourceType: "command",
     resourceId: cmd.id,
-    metadata: { type: cmd.type },
+    metadata: {
+      type: cmd.type,
+      ...(parsedIdempotencyKey ? { idempotent: "true" } : {}),
+    },
   });
 
-  return cmd;
+  return { command: cmd, created: true };
 }
 
 export function claimCommand(input: unknown) {

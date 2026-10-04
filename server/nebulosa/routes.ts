@@ -6,6 +6,7 @@ import {
   createCommand,
   createSession,
   healthSnapshot,
+  IdempotencyConflictError,
   listCommands,
   registerHeartbeat,
   requireAuth,
@@ -94,9 +95,17 @@ export function registerNebulosaRoutes(app: Express) {
   app.post("/api/v1/commands", requireAuth("command:write"), rateLimit(30), (req, res) => {
     try {
       const operator = (req as any).operator;
-      const command = createCommand(operator.username, req.body);
-      res.status(201).json(command);
-    } catch {
+      const idempotencyKey = req.get("Idempotency-Key");
+      const { command, created } = createCommand(operator.username, req.body, idempotencyKey);
+      res.setHeader("Idempotent-Replayed", String(!created));
+      res.status(created ? 201 : 200).json(command);
+    } catch (error) {
+      if (error instanceof IdempotencyConflictError) {
+        return res.status(409).json({
+          code: "idempotency_conflict",
+          message: error.message,
+        });
+      }
       res.status(400).json({ code: "invalid_command", message: "Command payload is invalid." });
     }
   });
@@ -104,7 +113,7 @@ export function registerNebulosaRoutes(app: Express) {
   app.post("/api/v1/commands/:commandId/cancel", requireAuth("command:cancel"), (req, res) => {
     try {
       const operator = (req as any).operator;
-      const command = cancelCommand(req.params.commandId, operator.username);
+      const command = cancelCommand(String(req.params.commandId), operator.username);
       if (!command) return res.status(404).json({ code: "not_found", message: "Command not found." });
       res.json(command);
     } catch (error) {
