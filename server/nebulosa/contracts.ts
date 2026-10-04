@@ -39,6 +39,8 @@ export const createCommandSchema = z.object({
   ttlSeconds: z.number().int().min(30).max(900).default(180),
 });
 
+export const idempotencyKeySchema = z.string().trim().min(1).max(128);
+
 export const commandResultSchema = z.object({
   message: z.string().min(1),
   output: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
