@@ -32,6 +32,8 @@
     moderationBlockedKeywords: [],
     moderationAction: 'remove',
     waitingRoomEnabled: false,
+    waitingRoomAutoAdmit: false,
+    waitingRoomAllowedNames: [],
   };
 
   let _initialised = false;
@@ -205,7 +207,13 @@
     } else {
       ModerationModule.setDryRun(settings.moderationDryRun);
     }
-    if (settings.waitingRoomEnabled) WaitingRoomModule.enable();
+    if (settings.waitingRoomEnabled) {
+      WaitingRoomModule.enable({
+        hostCapable: capabilities.hostCapable,
+        autoAdmit: settings.waitingRoomAutoAdmit,
+        allowedNames: settings.waitingRoomAllowedNames,
+      });
+    }
 
     const role = capabilities.role;
     log('role_resolved', { role, hostCapable: capabilities.hostCapable });
@@ -310,6 +318,18 @@
     const map = { multipin: MultipinModule, cameraMonitor: CameraMonitorModule, moderation: ModerationModule, waitingRoom: WaitingRoomModule };
     const m = map[mod];
     if (!m) return;
+    if (enabled && mod === 'waitingRoom') {
+      _loadSettings().then((settings) => {
+        m.enable({
+          hostCapable: _status.hostCapable,
+          autoAdmit: settings.waitingRoomAutoAdmit,
+          allowedNames: settings.waitingRoomAllowedNames,
+        });
+        _saveSettings();
+        _sendStatus();
+      });
+      return;
+    }
     enabled ? m.enable() : m.disable();
     _saveSettings();
     _sendStatus();
@@ -347,12 +367,15 @@
   }
 
   function _saveSettings() {
+    const waitingRoomRules = WaitingRoomModule.getRules();
     chrome.storage.sync.set({
       multipinEnabled: MultipinModule.isEnabled(),
       cameraMonitorEnabled: CameraMonitorModule.isEnabled(),
       moderationEnabled: ModerationModule.isEnabled(),
       moderationDryRun: ModerationModule.isDryRun(),
       waitingRoomEnabled: WaitingRoomModule.isEnabled(),
+      waitingRoomAutoAdmit: waitingRoomRules.autoAdmit,
+      waitingRoomAllowedNames: waitingRoomRules.allowedNames,
     });
   }
 

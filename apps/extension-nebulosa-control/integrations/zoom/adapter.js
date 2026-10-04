@@ -200,19 +200,39 @@ async function unpinParticipant(name, options = {}) {
 
 async function admitParticipant(name) {
   try {
+    if (typeof name !== 'string' || !name.trim()) return false;
+    const targetName = name.normalize('NFKC').replace(/\s+/g, ' ').trim().toLocaleLowerCase();
     const panel = _queryFirst(ZoomSelectors.WAITING_ROOM_PANEL);
     if (!panel) return false;
     const rows = _queryAll(ZoomSelectors.PARTICIPANT_ROW, panel);
+    const matches = [];
     for (const row of rows) {
-      const rowName = row.textContent.trim();
-      if (rowName.toLowerCase().includes(name.toLowerCase())) {
-        const admitBtn = _queryFirst(ZoomSelectors.WAITING_ROOM_ADMIT_BTN, row);
-        if (admitBtn) { admitBtn.click(); return true; }
-      }
+      const nameElement = _queryFirst(ZoomSelectors.PARTICIPANT_ROW_NAME, row);
+      if (!nameElement) continue;
+      const rowName = String(nameElement.textContent || '').normalize('NFKC').replace(/\s+/g, ' ').trim().toLocaleLowerCase();
+      if (rowName === targetName) matches.push(row);
     }
-    return false;
+    if (matches.length !== 1) return false;
+    const admitBtn = _queryFirst(ZoomSelectors.WAITING_ROOM_ADMIT_BTN, matches[0]);
+    if (!admitBtn) return false;
+    admitBtn.click();
+    return true;
   } catch (err) {
     console.error('[Nebulosa:ZoomAdapter] admitParticipant error:', err);
+    return false;
+  }
+}
+
+async function admitAll() {
+  try {
+    const panel = _queryFirst(ZoomSelectors.WAITING_ROOM_PANEL);
+    if (!panel) return false;
+    const admitAllButton = _queryFirst(ZoomSelectors.WAITING_ROOM_ADMIT_ALL_BTN, panel);
+    if (!admitAllButton) return false;
+    admitAllButton.click();
+    return true;
+  } catch (err) {
+    console.error('[Nebulosa:ZoomAdapter] admitAll error:', err);
     return false;
   }
 }
@@ -382,6 +402,7 @@ const ZoomAdapter = {
   pinParticipant,
   unpinParticipant,
   admitParticipant,
+  admitAll,
   removeParticipant,
   muteParticipant,
   sendPrivateChatMessage,
