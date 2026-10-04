@@ -85,7 +85,13 @@ These events are emitted by feature modules to signal outcomes.
 A chat message matched a blocked keyword.
 
 ```js
-{ sender: string, text: string, keyword: string }
+{
+  sender: string,
+  text: string,
+  keyword: string,
+  action: 'remove_participant',
+  dryRun: boolean
+}
 ```
 
 ### `camera_reminder_due`  *(emitted by `modules/camera-monitor.js`)*

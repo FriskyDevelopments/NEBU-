@@ -226,17 +226,28 @@
     </label>
   </div>
 
-  <!-- Moderation — SCAFFOLD -->
+  <!-- Moderation -->
   <div class="module-row">
     <div class="module-info">
       <div class="module-name">
         Moderation
-        <span class="badge-scaffold">Scaffold</span>
+        <span class="badge-scaffold">Partial</span>
       </div>
-      <div class="module-desc">Chat keyword filter; mute/remove action TBD</div>
+      <div class="module-desc">Remove participants whose chat matches a blocked keyword</div>
     </div>
     <label class="toggle">
       <input type="checkbox" id="toggle-moderation" data-module="moderation" aria-label="Enable Moderation" />
+      <span class="toggle-slider"></span>
+    </label>
+  </div>
+
+  <div class="module-row">
+    <div class="module-info">
+      <div class="module-name">Moderation dry run</div>
+      <div class="module-desc">Report matching actions without changing the meeting</div>
+    </div>
+    <label class="toggle">
+      <input type="checkbox" id="toggle-moderation-dry-run" aria-label="Enable moderation dry run" />
       <span class="toggle-slider"></span>
     </label>
   </div>

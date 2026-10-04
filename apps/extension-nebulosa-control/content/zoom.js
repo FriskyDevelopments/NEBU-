@@ -28,6 +28,7 @@
     multipinEnabled: true,
     cameraMonitorEnabled: false,
     moderationEnabled: false,
+    moderationDryRun: false,
     waitingRoomEnabled: false,
   };
 
@@ -193,7 +194,11 @@
 
     if (settings.multipinEnabled) MultipinModule.enable();
     if (settings.cameraMonitorEnabled) CameraMonitorModule.enable();
-    if (settings.moderationEnabled) ModerationModule.enable();
+    if (settings.moderationEnabled) {
+      ModerationModule.enable({ dryRun: settings.moderationDryRun });
+    } else {
+      ModerationModule.setDryRun(settings.moderationDryRun);
+    }
     if (settings.waitingRoomEnabled) WaitingRoomModule.enable();
 
     const role = capabilities.role;
@@ -277,6 +282,13 @@
         sendResponse({ ok: true });
         return false;
       }
+      case 'SET_MODERATION_DRY_RUN': {
+        ModerationModule.setDryRun(message.dryRun);
+        _saveSettings();
+        _sendStatus();
+        sendResponse({ ok: true });
+        return false;
+      }
       default:
         sendResponse({ ok: false, error: 'Unknown message type' });
         return false;
@@ -299,6 +311,7 @@
       multipin: MultipinModule.isEnabled(),
       cameraMonitor: CameraMonitorModule.isEnabled(),
       moderation: ModerationModule.isEnabled(),
+      moderationDryRun: ModerationModule.isDryRun(),
       waitingRoom: WaitingRoomModule.isEnabled(),
       pinned: MultipinModule.getPinned(),
       lastEvent: _lastEvent,
@@ -326,6 +339,7 @@
       multipinEnabled: MultipinModule.isEnabled(),
       cameraMonitorEnabled: CameraMonitorModule.isEnabled(),
       moderationEnabled: ModerationModule.isEnabled(),
+      moderationDryRun: ModerationModule.isDryRun(),
       waitingRoomEnabled: WaitingRoomModule.isEnabled(),
     });
   }

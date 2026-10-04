@@ -21,6 +21,7 @@ test('MutationObserver rescan emits participant join on zoom_web_client rows', a
 
   let observerCb = null;
   global.window = {
+    addEventListener() {},
     setTimeout(cb) { cb(); return 1; },
     clearTimeout() {},
     setInterval() { return 1; },
