@@ -85,7 +85,7 @@ docs/
 | Feature | Status | Description |
 |---|---|---|
 | Multipin | ✅ Implemented | Auto-pin on hand raise + camera on. 60s grace on camera off. |
-| Camera Monitor | ⚡ Partial | Tracks camera-off duration. Reminder sending TBD. |
+| Camera Monitor | ✅ Implemented | Sends a private reminder after 5 minutes camera-off. |
 | Moderation | 🔲 Scaffold | Chat keyword detection. Mute/remove action TBD. |
 | Waiting Room | 🔲 Scaffold | Architecture boundary. Auto-admit rules TBD. |
 

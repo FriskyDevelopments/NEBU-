@@ -1,4 +1,4 @@
-/* global window, document, MouseEvent */
+/* global window, document, MouseEvent, Event, InputEvent, KeyboardEvent */
 
 const ZoomSelectors = typeof require !== 'undefined' ? require('./selectors') : window.ZoomSelectors;
 const ZoomEvents = typeof require !== 'undefined' ? require('./events') : window.ZoomEvents;
@@ -52,6 +52,81 @@ function _findMenuItem(container, textPattern) {
     if ((item.textContent || '').toLowerCase().includes(lower)) return item;
   }
   return null;
+}
+
+function _normaliseText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function _setInputValue(input, message) {
+  if (input.isContentEditable) {
+    input.textContent = message;
+  } else {
+    const prototype = Object.getPrototypeOf(input);
+    const descriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
+    if (descriptor && descriptor.set) descriptor.set.call(input, message);
+    else input.value = message;
+  }
+  const InputEventCtor = typeof InputEvent === 'function' ? InputEvent : Event;
+  input.dispatchEvent(new InputEventCtor('input', { bubbles: true, inputType: 'insertText', data: message }));
+}
+
+async function sendPrivateChatMessage(name, message) {
+  try {
+    let panel = _queryFirst(ZoomSelectors.CHAT_PANEL);
+    if (!panel) {
+      const openButton = _queryFirst(ZoomSelectors.CHAT_OPEN_BTN);
+      if (!openButton) return 'CHAT_BUTTON_NOT_FOUND';
+      openButton.click();
+      try { panel = await _waitFor(ZoomSelectors.CHAT_PANEL, 3000); } catch (_) { return 'CHAT_PANEL_NOT_FOUND'; }
+    }
+
+    const recipientButton = _queryFirst(ZoomSelectors.CHAT_RECIPIENT_BTN, panel);
+    if (!recipientButton) return 'RECIPIENT_BUTTON_NOT_FOUND';
+    recipientButton.click();
+
+    let recipientMenu;
+    try { recipientMenu = await _waitFor(ZoomSelectors.CHAT_RECIPIENT_MENU, 2500); } catch (_) { return 'RECIPIENT_MENU_NOT_FOUND'; }
+
+    const expectedName = _normaliseText(name);
+    const options = _queryAll(ZoomSelectors.CHAT_RECIPIENT_OPTION, recipientMenu);
+    const recipient = options.find((option) => {
+      const optionName = _normaliseText(option.getAttribute('aria-label') || option.textContent);
+      return optionName === expectedName || optionName.startsWith(`${expectedName} (`);
+    });
+    if (!recipient) {
+      document.body.click();
+      return 'RECIPIENT_NOT_FOUND';
+    }
+    recipient.click();
+
+    let input = _queryFirst(ZoomSelectors.CHAT_INPUT, panel);
+    if (!input) {
+      try { input = await _waitFor(ZoomSelectors.CHAT_INPUT, 2500); } catch (_) { return 'CHAT_INPUT_NOT_FOUND'; }
+    }
+    input.focus();
+    _setInputValue(input, message);
+
+    const sendButton = _queryFirst(ZoomSelectors.CHAT_SEND_BTN, panel);
+    if (sendButton && !sendButton.disabled) {
+      sendButton.click();
+    } else {
+      input.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'Enter',
+        code: 'Enter',
+        keyCode: 13,
+        which: 13,
+        bubbles: true,
+        cancelable: true,
+      }));
+    }
+
+    dbg('private_chat_message_sent', { recipient: name });
+    return 'MESSAGE_SENT';
+  } catch (err) {
+    console.error('[Nebulosa:ZoomAdapter] sendPrivateChatMessage error:', err);
+    return 'ERROR';
+  }
 }
 
 async function pinParticipant(name, options = {}) {
@@ -309,6 +384,7 @@ const ZoomAdapter = {
   admitParticipant,
   removeParticipant,
   muteParticipant,
+  sendPrivateChatMessage,
   getDiagnosticsSnapshot,
   getUndoState,
   undoLastHostAction,

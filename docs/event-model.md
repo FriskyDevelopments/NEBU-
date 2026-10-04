@@ -101,6 +101,20 @@ A participant's camera has been off longer than the configured threshold.
 { name: string }
 ```
 
+### `camera_reminder_sent`  *(emitted by `modules/camera-monitor.js`)*
+The private Zoom chat reminder was sent successfully.
+
+```js
+{ name: string }
+```
+
+### `camera_reminder_failed`  *(emitted by `modules/camera-monitor.js`)*
+The private reminder could not be sent. The module retries while the camera remains off.
+
+```js
+{ name: string, reason: string }
+```
+
 ---
 
 ## Events emitted by Content Script
