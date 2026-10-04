@@ -8,8 +8,10 @@ import {
   healthSnapshot,
   IdempotencyConflictError,
   listCommands,
+  listFailedExecutorJobs,
   registerHeartbeat,
   requireAuth,
+  retryFailedCommand,
   updateCommandExecution,
 } from "./service";
 import { nebulosaState } from "./state";
@@ -110,6 +112,17 @@ export function registerNebulosaRoutes(app: Express) {
     }
   });
 
+  app.post("/api/v1/commands/:commandId/retry", requireAuth("command:write"), (req, res) => {
+    try {
+      const operator = (req as any).operator;
+      const command = retryFailedCommand(req.params.commandId, operator.username);
+      if (!command) return res.status(404).json({ code: "not_found", message: "Command not found." });
+      res.json(command);
+    } catch (error) {
+      res.status(409).json({ code: "not_retryable", message: (error as Error).message });
+    }
+  });
+
   app.post("/api/v1/commands/:commandId/cancel", requireAuth("command:cancel"), (req, res) => {
     try {
       const operator = (req as any).operator;
@@ -160,5 +173,9 @@ export function registerNebulosaRoutes(app: Express) {
 
   app.get("/api/v1/executors", requireAuth("command:view"), (_req, res) => {
     res.json([...nebulosaState.executors.values()]);
+  });
+
+  app.get("/api/v1/executor/jobs/failed", requireAuth("command:view"), (_req, res) => {
+    res.json(listFailedExecutorJobs());
   });
 }

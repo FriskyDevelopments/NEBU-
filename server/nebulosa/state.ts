@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import type { CommandRecord, CommandStatus, CommandType, OperatorRole } from "./contracts";
+import type { CommandRecord, CommandStatus, CommandType, OperatorRole } from "./contracts.ts";
 
 export type Operator = {
   id: string;
