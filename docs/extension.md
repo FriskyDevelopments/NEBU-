@@ -58,11 +58,12 @@ Nebulosa Control is a Manifest V3 browser extension that automates host actions 
 
 **Requires:** Host or co-host privileges in the meeting.
 
-### Camera Monitor ⚡ (Partial)
+### Camera Monitor ✅
 
 - Tracks camera-off start time per participant
-- After a configurable threshold (default: 5 minutes), emits a `camera_reminder_due` event
-- **TODO:** Actually sending a Zoom chat reminder requires DOM automation that is not yet validated in extension mode. See `modules/camera-monitor.js` for the TODO comment.
+- After a configurable threshold (default: 5 minutes), selects the participant in Zoom chat and sends a private reminder
+- Sends at most one successful reminder per camera-off period and retries on the next check when Zoom's chat UI is unavailable
+- Emits `camera_reminder_due`, `camera_reminder_sent`, and `camera_reminder_failed` events for observability
 
 ### Moderation 🔲 (Scaffold)
 
