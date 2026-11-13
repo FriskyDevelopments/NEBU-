@@ -43,7 +43,10 @@
     onCameraOn: null,
     onCameraOff: null,
     onChatMessage: null,
+    onMeetingEnded: null,
   };
+
+  let _meetingEndedEmitted = false;
 
   const _selectorFailures = new Map();
 
@@ -93,6 +96,7 @@
     window.__NEBULOSA_STARTED__ = true;
 
     _surface = options.surface || 'unknown';
+    _meetingEndedEmitted = false;
     log('observation_start');
 
     _scanAll();
@@ -101,6 +105,7 @@
       if (_debounceTimer !== null) window.clearTimeout(_debounceTimer);
       _debounceTimer = window.setTimeout(() => {
         _debounceTimer = null;
+        if (_meetingAlreadyEnded()) return;
         _scanParticipants();
         _scanHandRaises();
         _scanCameras();
@@ -111,7 +116,21 @@
     _pollInterval = window.setInterval(_scanAll, 3000);
   }
 
+  function _meetingAlreadyEnded() {
+    if (_meetingEndedEmitted) return true;
+    if (!ZoomSelectors || !ZoomSelectors.WC_ENDED_BANNER) return false;
+    const banner = _queryFirst(ZoomSelectors.WC_ENDED_BANNER);
+    if (!banner) return false;
+    _meetingEndedEmitted = true;
+    log('meeting_ended');
+    if (typeof _callbacks.onMeetingEnded === 'function') {
+      _callbacks.onMeetingEnded({ reason: 'meeting_ended' });
+    }
+    return true;
+  }
+
   function _scanAll() {
+    if (_meetingAlreadyEnded()) return;
     _scanParticipants();
     _scanHandRaises();
     _scanCameras();

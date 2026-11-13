@@ -4,6 +4,8 @@ type SessionStats = {
   operatorRole: string;
   activeExecutors: number;
   pendingCommands: number;
+  failedCommands: number;
+  retryingCommands: number;
   alerts: number;
 };
 
@@ -12,6 +14,8 @@ export function SessionGrid({ stats }: { stats: SessionStats }) {
     ["Role", stats.operatorRole],
     ["Executors", String(stats.activeExecutors)],
     ["Pending", String(stats.pendingCommands)],
+    ["Failed", String(stats.failedCommands)],
+    ["Retrying", String(stats.retryingCommands)],
     ["Alerts", String(stats.alerts)],
   ];
 
@@ -20,9 +24,9 @@ export function SessionGrid({ stats }: { stats: SessionStats }) {
       {items.map(([label, value]) => (
         <Card key={label}>
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs text-muted-foreground uppercase tracking-wider">{label}</CardTitle>
+            <CardTitle className="executor-stat-label">{label}</CardTitle>
           </CardHeader>
-          <CardContent className="text-xl font-semibold">{value}</CardContent>
+          <CardContent className="executor-stat-value">{value}</CardContent>
         </Card>
       ))}
     </div>

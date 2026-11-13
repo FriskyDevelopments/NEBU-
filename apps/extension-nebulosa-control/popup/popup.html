@@ -155,6 +155,28 @@
     #pinned-list .names { color: var(--green); }
     #pinned-list.hidden { display: none; }
 
+    .undo-row {
+      padding: 0 16px 12px;
+    }
+    .undo-button {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid var(--accent);
+      border-radius: 5px;
+      background: transparent;
+      color: var(--text);
+      cursor: pointer;
+      font: inherit;
+    }
+    .undo-button:hover:not(:disabled) { background: var(--surface); }
+    .undo-button:disabled { opacity: 0.4; cursor: not-allowed; }
+    .undo-result {
+      min-height: 14px;
+      margin-top: 5px;
+      color: var(--text-dim);
+      font-size: 11px;
+    }
+
     /* Diagnostics */
     .diag-toggle {
       display: flex;
@@ -211,14 +233,13 @@
     </label>
   </div>
 
-  <!-- Camera Monitor — PARTIALLY IMPLEMENTED -->
+  <!-- Camera Monitor — IMPLEMENTED -->
   <div class="module-row">
     <div class="module-info">
       <div class="module-name">
         Camera Monitor
-        <span class="badge-scaffold">Partial</span>
       </div>
-      <div class="module-desc">Track camera-off duration; reminder sending TBD</div>
+      <div class="module-desc">Send a private reminder after 5 minutes camera-off</div>
     </div>
     <label class="toggle">
       <input type="checkbox" id="toggle-cameraMonitor" data-module="cameraMonitor" aria-label="Enable Camera Monitor" />
@@ -226,17 +247,27 @@
     </label>
   </div>
 
-  <!-- Moderation — SCAFFOLD -->
+  <!-- Moderation -->
   <div class="module-row">
     <div class="module-info">
       <div class="module-name">
         Moderation
-        <span class="badge-scaffold">Scaffold</span>
       </div>
-      <div class="module-desc">Chat keyword filter; mute/remove action TBD</div>
+      <div class="module-desc">Mute or remove blocked-keyword senders</div>
     </div>
     <label class="toggle">
       <input type="checkbox" id="toggle-moderation" data-module="moderation" aria-label="Enable Moderation" />
+      <span class="toggle-slider"></span>
+    </label>
+  </div>
+
+  <div class="module-row">
+    <div class="module-info">
+      <div class="module-name">Moderation dry run</div>
+      <div class="module-desc">Report matching actions without changing the meeting</div>
+    </div>
+    <label class="toggle">
+      <input type="checkbox" id="toggle-moderation-dry-run" aria-label="Enable moderation dry run" />
       <span class="toggle-slider"></span>
     </label>
   </div>
@@ -261,6 +292,11 @@
 <div id="pinned-list" class="hidden">
   <div class="label">Currently pinned:</div>
   <div class="names" id="pinned-names">—</div>
+</div>
+
+<div class="undo-row">
+  <button type="button" class="undo-button" id="undo-host-action" disabled>Nothing to undo</button>
+  <div class="undo-result" id="undo-result" role="status" aria-live="polite"></div>
 </div>
 
 <!-- Diagnostics (collapsible) -->

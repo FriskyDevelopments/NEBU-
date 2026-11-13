@@ -17,6 +17,7 @@
   const CameraMonitorModule = window.NebulosaCameraMonitor;
   const ModerationModule = window.NebulosaModeration;
   const WaitingRoomModule = window.NebulosaWaitingRoom;
+  const MeetingSession = window.MeetingSession;
 
   const DEBUG = window.__NEBULOSA_DEBUG === true;
   function log(event, payload = {}) {
@@ -27,10 +28,16 @@
     multipinEnabled: true,
     cameraMonitorEnabled: false,
     moderationEnabled: false,
+    moderationDryRun: false,
+    moderationBlockedKeywords: [],
+    moderationAction: 'remove',
     waitingRoomEnabled: false,
+    waitingRoomAutoAdmit: false,
+    waitingRoomAllowedNames: [],
   };
 
   let _initialised = false;
+  let _endingSession = false;
   let _watchStarted = false;
   let _bootstrapStarted = false;
   let _bootstrapStartTs = 0;
@@ -79,6 +86,25 @@
 
       if (!_initialised) _lastFailureReason = cap.unsupportedReason || cap.reason || '';
 
+      const meetingPlan = MeetingSession
+        ? MeetingSession.planMeetingEnd(_initialised, cap.meetingState)
+        : 'continue';
+      if (meetingPlan === 'cleanup') {
+        _endBotSession(cap.reason || 'meeting_ended');
+        return;
+      }
+      if (meetingPlan === 'hold') {
+        _stopBootstrapLoop();
+        _bootstrapStarted = false;
+        _status.bootstrapPhase = 'ended';
+        _status.meetingDetected = false;
+        _status.observersActive = false;
+        _status.automationArmed = false;
+        _lastFailureReason = cap.reason || 'meeting_ended';
+        _sendStatus();
+        return;
+      }
+
       if (!_initialised && !_bootstrapStarted) {
         _beginBootstrap();
       }
@@ -111,6 +137,15 @@
     const elapsed = Date.now() - _bootstrapStartTs;
     const cap = ZoomState.detectCapabilities();
     _status = { ..._status, ...cap, url: window.location.href };
+
+    if (cap.meetingState === 'ended') {
+      _status.bootstrapPhase = 'ended';
+      _lastFailureReason = cap.reason || 'meeting_ended';
+      _stopBootstrapLoop();
+      _bootstrapStarted = false;
+      _sendStatus();
+      return;
+    }
 
     if (elapsed > 15000) {
       _status.bootstrapPhase = 'failed';
@@ -163,8 +198,22 @@
 
     if (settings.multipinEnabled) MultipinModule.enable();
     if (settings.cameraMonitorEnabled) CameraMonitorModule.enable();
-    if (settings.moderationEnabled) ModerationModule.enable();
-    if (settings.waitingRoomEnabled) WaitingRoomModule.enable();
+    if (settings.moderationEnabled) {
+      ModerationModule.enable({
+        blockedKeywords: settings.moderationBlockedKeywords,
+        action: settings.moderationAction,
+        dryRun: settings.moderationDryRun,
+      });
+    } else {
+      ModerationModule.setDryRun(settings.moderationDryRun);
+    }
+    if (settings.waitingRoomEnabled) {
+      WaitingRoomModule.enable({
+        hostCapable: capabilities.hostCapable,
+        autoAdmit: settings.waitingRoomAutoAdmit,
+        allowedNames: settings.waitingRoomAllowedNames,
+      });
+    }
 
     const role = capabilities.role;
     log('role_resolved', { role, hostCapable: capabilities.hostCapable });
@@ -180,8 +229,53 @@
     bus.on('camera_on', _trackEvent('camera_on'));
     bus.on('camera_off', _trackEvent('camera_off'));
     bus.on('moderation_triggered', _trackEvent('moderation_triggered'));
+    bus.on('meeting_ended', (payload) => {
+      _lastEvent = { type: 'meeting_ended', payload: payload || {}, ts: Date.now() };
+      _endBotSession((payload && payload.reason) || 'meeting_ended');
+    });
+    bus.on('host_action_history_changed', _sendStatus);
+    bus.on('moderation_action_completed', _trackEvent('moderation_action_completed'));
 
     _sendStatus();
+  }
+
+  function _sessionModules() {
+    return {
+      multipin: MultipinModule,
+      cameraMonitor: CameraMonitorModule,
+      moderation: ModerationModule,
+      waitingRoom: WaitingRoomModule,
+    };
+  }
+
+  function _endBotSession(reason) {
+    if (_endingSession || !_initialised) return;
+    _endingSession = true;
+    const endedReason = reason || 'meeting_ended';
+    try {
+      if (MeetingSession) {
+        MeetingSession.cleanupBotSession({
+          reason: endedReason,
+          bus,
+          adapter: ZoomAdapter,
+          modules: _sessionModules(),
+        });
+      }
+    } finally {
+      _initialised = false;
+      _bootstrapStarted = false;
+      _stopBootstrapLoop();
+      _status.observersActive = false;
+      _status.meetingDetected = false;
+      _status.automationArmed = false;
+      _status.bootstrapPhase = 'ended';
+      _status.meetingState = 'ended';
+      _lastFailureReason = endedReason;
+      _lastEvent = { type: 'meeting_ended', payload: { reason: endedReason }, ts: Date.now() };
+      log('bot_session_cleaned', { reason: endedReason });
+      _sendStatus();
+      _endingSession = false;
+    }
   }
 
   function _enabledModules() {
@@ -204,6 +298,16 @@
         sendResponse({ ok: true });
         return false;
       }
+      case 'SET_MODERATION_DRY_RUN': {
+        ModerationModule.setDryRun(message.dryRun);
+        _saveSettings();
+        _sendStatus();
+        sendResponse({ ok: true });
+        return false;
+      }
+      case 'UNDO_HOST_ACTION':
+        ZoomAdapter.undoLastHostAction().then(sendResponse);
+        return true;
       default:
         sendResponse({ ok: false, error: 'Unknown message type' });
         return false;
@@ -214,6 +318,18 @@
     const map = { multipin: MultipinModule, cameraMonitor: CameraMonitorModule, moderation: ModerationModule, waitingRoom: WaitingRoomModule };
     const m = map[mod];
     if (!m) return;
+    if (enabled && mod === 'waitingRoom') {
+      _loadSettings().then((settings) => {
+        m.enable({
+          hostCapable: _status.hostCapable,
+          autoAdmit: settings.waitingRoomAutoAdmit,
+          allowedNames: settings.waitingRoomAllowedNames,
+        });
+        _saveSettings();
+        _sendStatus();
+      });
+      return;
+    }
     enabled ? m.enable() : m.disable();
     _saveSettings();
     _sendStatus();
@@ -226,11 +342,13 @@
       multipin: MultipinModule.isEnabled(),
       cameraMonitor: CameraMonitorModule.isEnabled(),
       moderation: ModerationModule.isEnabled(),
+      moderationDryRun: ModerationModule.isDryRun(),
       waitingRoom: WaitingRoomModule.isEnabled(),
       pinned: MultipinModule.getPinned(),
       lastEvent: _lastEvent,
       lastFailureReason: _lastFailureReason,
       selectorFailures: diag.selectorFailures || {},
+      undo: ZoomAdapter.getUndoState ? ZoomAdapter.getUndoState() : { canUndo: false, action: null },
     };
   }
 
@@ -249,11 +367,15 @@
   }
 
   function _saveSettings() {
+    const waitingRoomRules = WaitingRoomModule.getRules();
     chrome.storage.sync.set({
       multipinEnabled: MultipinModule.isEnabled(),
       cameraMonitorEnabled: CameraMonitorModule.isEnabled(),
       moderationEnabled: ModerationModule.isEnabled(),
+      moderationDryRun: ModerationModule.isDryRun(),
       waitingRoomEnabled: WaitingRoomModule.isEnabled(),
+      waitingRoomAutoAdmit: waitingRoomRules.autoAdmit,
+      waitingRoomAllowedNames: waitingRoomRules.allowedNames,
     });
   }
 

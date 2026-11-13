@@ -67,11 +67,13 @@ The content script detected an active Zoom meeting page. *(reserved — not yet 
 ```
 
 ### `meeting_ended`
-The meeting ended or the user left. *(reserved — not yet emitted)*
+The meeting ended or the user left. Emitted by the extension Zoom adapter when the ended banner is detected.
 
 ```js
-{}
+{ reason: 'meeting_ended' }
 ```
+
+Multipin, camera monitor, and moderation clear their in-meeting bot session (pins, camera-off grace timers, reminder tracking, keyword listener). The content script then destroys the adapter so DOM observers stop, and it will not arm a new session until the page leaves the ended state.
 
 ---
 
@@ -83,7 +85,13 @@ These events are emitted by feature modules to signal outcomes.
 A chat message matched a blocked keyword.
 
 ```js
-{ sender: string, text: string, keyword: string }
+{
+  sender: string,
+  text: string,
+  keyword: string,
+  action: 'remove_participant',
+  dryRun: boolean
+}
 ```
 
 ### `camera_reminder_due`  *(emitted by `modules/camera-monitor.js`)*
@@ -91,6 +99,20 @@ A participant's camera has been off longer than the configured threshold.
 
 ```js
 { name: string }
+```
+
+### `camera_reminder_sent`  *(emitted by `modules/camera-monitor.js`)*
+The private Zoom chat reminder was sent successfully.
+
+```js
+{ name: string }
+```
+
+### `camera_reminder_failed`  *(emitted by `modules/camera-monitor.js`)*
+The private reminder could not be sent. The module retries while the camera remains off.
+
+```js
+{ name: string, reason: string }
 ```
 
 ---
