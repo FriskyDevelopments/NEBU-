@@ -179,6 +179,7 @@ class WebhookEventModel(Base):
     __tablename__ = "webhook_events"
     __table_args__ = (
         UniqueConstraint("delivery_id", name="uq_webhook_delivery_id"),
+        UniqueConstraint("raw_body_sha256", name="uq_webhook_raw_body_sha256"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -187,6 +188,7 @@ class WebhookEventModel(Base):
     )
     event_name: Mapped[str] = mapped_column(Text, nullable=False)
     delivery_id: Mapped[str] = mapped_column(Text, nullable=False)
+    raw_body_sha256: Mapped[Optional[str]] = mapped_column(Text)
     payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 

@@ -160,11 +160,14 @@
         "parameters": [
           { "name": "x-github-event", "in": "header", "required": true, "schema": { "type": "string" } },
           { "name": "x-github-delivery", "in": "header", "required": true, "schema": { "type": "string" } },
-          { "name": "x-hub-signature-256", "in": "header", "required": false, "schema": { "type": "string" } }
+          { "name": "x-hub-signature-256", "in": "header", "required": true, "schema": { "type": "string" } }
         ],
         "responses": {
           "200": { "description": "Webhook accepted" },
-          "401": { "description": "Invalid signature" }
+          "400": { "description": "Malformed payload or empty delivery ID" },
+          "401": { "description": "Invalid signature" },
+          "409": { "description": "Webhook replay rejected" },
+          "503": { "description": "Webhook verification or replay protection unavailable" }
         }
       }
     }
