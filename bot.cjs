@@ -1,6 +1,7 @@
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
 const crypto = require('crypto');
+const { registerMeetingCommandAudit } = require('./bot/meetingCommandAudit');
 const { 
   getAccessToken, 
   refreshAccessToken, 
@@ -42,10 +43,7 @@ console.log('🤖 LA NUBE BOT starting up...');
 console.log('Bot token configured:', process.env.BOT_TOKEN ? 'Yes' : 'No');
 console.log('Observatory channel:', process.env.LOG_CHANNEL_ID ? 'Yes' : 'No');
 
-// Debug: Log all incoming messages
-bot.on('message', (msg) => {
-  console.log(`📨 Message received: ${msg.text} from user ${msg.from.id} (@${msg.from.username})`);
-});
+registerMeetingCommandAudit(bot);
 
 // Admin user IDs (configure via env; no hardcoded owners)
 const ADMIN_IDS = [process.env.ADMIN_USER_ID].filter(Boolean).map(id => parseInt(id));
