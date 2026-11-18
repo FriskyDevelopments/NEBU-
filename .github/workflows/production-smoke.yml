@@ -1,0 +1,36 @@
+name: NEBU production smoke
+
+on:
+  workflow_run:
+    workflows:
+      - Deploy to GitHub Pages
+      - Deploy static content to Pages
+      - Deploy Jekyll with GitHub Pages dependencies preinstalled
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Read-only production smoke
+        env:
+          PRODUCTION_SITE_URL: ${{ vars.PRODUCTION_SITE_URL }}
+        run: node scripts/production-smoke.cjs

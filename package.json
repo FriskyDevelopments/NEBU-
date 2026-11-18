@@ -15,7 +15,9 @@
     "test:bot-retry": "node --test bot/retryGuard.test.js",
     "test:meeting-audit": "node --test tests/unit/meeting-command-audit.test.cjs",
     "test:bot-health": "node --test tests/bot-health.test.cjs",
-    "test:org-isolation": "node --test tests/nebulosa-organization-isolation.test.cjs"
+    "test:org-isolation": "node --test tests/nebulosa-organization-isolation.test.cjs",
+    "test:browser": "playwright test",
+    "test:release": "node --test tests/release/*.test.cjs"
   },
   "keywords": [
     "telegram",
@@ -57,7 +59,8 @@
     "tsx": "^4.20.6",
     "typescript": "^5.6.3",
     "vite": "^8.2.1",
-    "wouter": "^3.3.5"
+    "wouter": "^3.3.5",
+    "@playwright/test": "1.63.0"
   },
   "engines": {
     "node": ">=18.0.0"
