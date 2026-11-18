@@ -143,6 +143,35 @@
 }
 
 
+.executor-stat-label {
+  color: #a1a1aa;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.executor-stat-value {
+  color: #f4f4f5;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.executor-job-title {
+  color: #f4f4f5;
+  font-weight: 600;
+}
+
+.executor-job-meta {
+  color: #d4d4d8;
+  font-size: 0.75rem;
+}
+
+.executor-job-error {
+  color: #fca5a5;
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+}
+
 @layer utilities {
   .xi-pulse-active {
     animation: xi-pulse-active 1.8s ease-in-out infinite;
