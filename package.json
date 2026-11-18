@@ -14,7 +14,8 @@
     "typecheck:bot": "tsc --noEmit --allowImportingTsExtensions --strict --skipLibCheck --esModuleInterop --moduleResolution node --module commonjs --target es2022 server/nebulosa/contracts.ts server/nebulosa/state.ts server/nebulosa/config.ts server/nebulosa/service.ts server/nebulosa/telegram.ts server/nebulosa/routes.ts tests/node/command-idempotency.test.ts",
     "test:bot-retry": "node --test bot/retryGuard.test.js",
     "test:meeting-audit": "node --test tests/unit/meeting-command-audit.test.cjs",
-    "test:bot-health": "node --test tests/bot-health.test.cjs"
+    "test:bot-health": "node --test tests/bot-health.test.cjs",
+    "test:org-isolation": "node --test tests/nebulosa-organization-isolation.test.cjs"
   },
   "keywords": [
     "telegram",

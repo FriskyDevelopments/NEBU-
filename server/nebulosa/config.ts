@@ -1,4 +1,25 @@
 import crypto from "crypto";
+
+// Production must fail closed before any sibling module is pulled in — this
+// file is also validated standalone, so the executor-retries import stays
+// below the check on purpose.
+const requiredProductionEnv = [
+  "NEBULOSA_ORGANIZATION_ID",
+  "NEBULOSA_SESSION_SECRET",
+  "NEBULOSA_EXECUTOR_SECRET",
+  "NEBULOSA_ADMIN_PASSWORD",
+  "NEBULOSA_OPERATOR_PASSWORD",
+  "NEBULOSA_VIEWER_PASSWORD",
+];
+
+// Fail closed in production before pulling in any sibling module — this file
+// is also validated standalone, so the check runs before the import below.
+if (process.env.NEBULOSA_ENV === "prod") {
+  for (const name of requiredProductionEnv) {
+    if (!process.env[name]?.trim()) throw new Error(`${name} must be provided in production`);
+  }
+}
+
 import { clampMaxAttempts } from "./executor-retries.ts";
 
 export type Environment = "dev" | "staging" | "prod";
@@ -11,6 +32,7 @@ function readEnvironment(value: string | undefined): Environment {
 const defaultSessionSecret = "local-development-session-secret-change-me";
 
 export const config = {
+  organizationId: process.env.NEBULOSA_ORGANIZATION_ID ?? "local",
   environment: readEnvironment(process.env.NEBULOSA_ENV),
   sessionTtlMs: 1000 * 60 * 20,
   allowedOperators: (process.env.NEBULOSA_OPERATOR_ALLOWLIST ?? "admin,operator")
@@ -23,12 +45,14 @@ export const config = {
   commandMaxAttempts: clampMaxAttempts(Number(process.env.NEBULOSA_COMMAND_MAX_ATTEMPTS ?? 3)),
 };
 
-if (config.environment === "prod" && config.sessionSecret === defaultSessionSecret) {
-  throw new Error("NEBULOSA_SESSION_SECRET must be provided in production");
+if (config.environment === "prod") {
+  if (config.sessionSecret === defaultSessionSecret || config.executorSharedSecret === "local-executor-secret") {
+    throw new Error("Development secrets must not be used in production");
+  }
 }
 
-export function signExecutorNonce(executorId: string, nonce: string): string {
+export function signExecutorRequest(organizationId: string, method: string, path: string, timestamp: string, body: unknown): string {
   const hmac = crypto.createHmac("sha256", config.executorSharedSecret);
-  hmac.update(`${executorId}:${nonce}`);
+  hmac.update([organizationId, method, path, timestamp, JSON.stringify(body)].join("\n"));
   return hmac.digest("hex");
 }
