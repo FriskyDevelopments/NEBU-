@@ -28,7 +28,25 @@ export const getMockResponse = (method: string, url: string): { status: number, 
     return { status: 500, data: { message: "Internal Server Error Simulation" } };
   }
 
+  if (scenario === "partial" && routeKey === "GET:/api/v1/executors") {
+    return { status: 503, data: { message: "Executor status unavailable" } };
+  }
+
   const handlers: Record<string, () => any> = {
+    "GET:/api/meetings/active": () => {
+      if (scenario === "empty") return [];
+      if (scenario === "partial") return [{ meetingId: "demo-meeting", status: "active", participantCount: null }];
+      return [{ meetingId: "demo-meeting", status: "active", currentParticipants: 8 }];
+    },
+    "GET:/api/v1/executors": () => {
+      if (scenario === "empty") return [];
+      const now = Date.now();
+      return [
+        { id: "demo-ready", status: "ready", lastHeartbeatAt: now },
+        { id: "demo-degraded", status: "degraded", lastHeartbeatAt: now },
+        { id: "demo-stale", status: "ready", lastHeartbeatAt: now - 60_000 },
+      ];
+    },
     "GET:/api/v1/session/summary": () => {
       if (scenario === "empty") return null; // Or 404
       if (scenario === "partial") return { ...sessionFixture, alerts: 0, pendingCommands: 0 };
@@ -36,7 +54,10 @@ export const getMockResponse = (method: string, url: string): { status: number, 
     },
     "GET:/api/v1/commands": () => {
       if (scenario === "empty" || scenario === "partial") return [];
-      return commandsFixture;
+      return commandsFixture.map((command) => ({
+        ...command,
+        failures: command.failures?.map((failure) => ({ ...failure })),
+      }));
     },
     "GET:/api/v1/alerts": () => {
       if (scenario === "empty" || scenario === "partial") return [];
@@ -50,6 +71,18 @@ export const getMockResponse = (method: string, url: string): { status: number, 
     "POST:/api/v1/auth/login": () => ({ message: "Mock login successful" }),
     "POST:/api/v1/commands": () => ({ message: "Mock command queued" }),
   };
+
+  if (method.toUpperCase() === "POST" && url.startsWith("/api/v1/commands/") && url.endsWith("/retry")) {
+    const commandId = url.split("/")[4];
+    const existing = commandsFixture.find((command) => command.id === commandId);
+    if (!existing || existing.status !== "failed") {
+      return { status: 409, data: { code: "not_retryable", message: "Cannot retry command from its current status" } };
+    }
+    existing.status = "pending";
+    existing.attempt = (existing.attempt ?? existing.failures?.length ?? 1) + 1;
+    existing.maxAttempts = Math.max(existing.maxAttempts ?? 3, existing.attempt);
+    return { status: 200, data: existing };
+  }
 
   if (handlers[routeKey]) {
     const data = handlers[routeKey]();

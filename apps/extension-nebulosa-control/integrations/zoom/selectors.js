@@ -73,6 +73,12 @@ const ZoomSelectors = {
   CHAT_PANEL: ['#chat-panel', '[aria-label*="Chat"]', '[class*="chat-container"]'],
   CHAT_MESSAGE: ['[class*="chat-message__text"]', '[class*="chat-item"]'],
   CHAT_SENDER: ['[class*="chat-message__sender"]', '[class*="message-sender"]'],
+  CHAT_OPEN_BTN: ['button[aria-label*="Chat"]', '[data-testid*="chat-button"]', 'button[class*="chat-button"]'],
+  CHAT_RECIPIENT_BTN: ['button[aria-label*="Send to"]', '[data-testid*="chat-recipient"]', '[class*="chat-recipient"] button'],
+  CHAT_RECIPIENT_MENU: ['[role="listbox"]', '[role="menu"]', '[class*="chat-recipient"]'],
+  CHAT_RECIPIENT_OPTION: ['[role="option"]', '[role="menuitem"]', '[class*="recipient-item"]'],
+  CHAT_INPUT: ['textarea[aria-label*="message"]', '[data-testid*="chat-input"]', '[contenteditable="true"][role="textbox"]', '[class*="chat-box"] textarea'],
+  CHAT_SEND_BTN: ['button[aria-label*="Send"]', '[data-testid*="chat-send"]', 'button[class*="send-button"]'],
 
   TOOLBAR: ['#wc-footer', '[class*="footer-toolbar"]', '[data-testid*="footer"]', '[role="toolbar"]'],
   LEAVE_BTN: ['[aria-label*="Leave"]', 'button[class*="leave-meeting"]'],

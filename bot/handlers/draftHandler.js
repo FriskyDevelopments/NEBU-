@@ -11,9 +11,11 @@ const {
     setReviewMessageId,
     DRAFT_STATUS,
 } = require('../../services/draftService');
-const { processImage } = require('../../services/stickerService');
 const { canCreate, recordCreation } = require('../../services/usageService');
 const { draftReviewKeyboard } = require('./stickerHandler');
+const { commandLedger } = require('../retryGuard');
+
+const DRAFT_ACTIONS = new Set(['approve', 'retry', 'trash', 'save']);
 
 /**
  * Handle draft-related callback queries (draft:*).
@@ -28,24 +30,38 @@ async function handleDraftCallback(bot, query) {
 
     await bot.answerCallbackQuery(query.id);
 
+    if (!DRAFT_ACTIONS.has(action)) {
+        console.warn('[DraftHandler] Unexpected draft action:', action);
+        return;
+    }
 
+    // One successful mutation per draft action. A second tap, or a Telegram
+    // redelivery that arrives as a new update, does not apply it again.
+    const outcome = await commandLedger.runOnce(
+        `draft:${action}:${userId}:${draftId}`,
+        () => dispatchDraftAction(bot, query, chatId, userId, draftId, action)
+    );
 
+    if (!outcome.repeated) return;
+
+    const note = outcome.inflight
+        ? `ℹ️ Still applying that action to draft #${draftId}.`
+        : `ℹ️ Draft #${draftId} was already updated. No further change was made.`;
+    await bot.sendMessage(chatId, note);
+}
+
+async function dispatchDraftAction(bot, query, chatId, userId, draftId, action) {
     switch (action) {
         case 'approve':
-            await handleApproveDraft(bot, query, chatId, userId, draftId);
-            break;
+            return handleApproveDraft(bot, query, chatId, userId, draftId);
         case 'retry':
-            await handleRetryDraft(bot, query, chatId, userId, draftId);
-            break;
+            return handleRetryDraft(bot, query, chatId, userId, draftId);
         case 'trash':
-            await handleTrashDraft(bot, query, chatId, userId, draftId);
-            break;
+            return handleTrashDraft(bot, query, chatId, userId, draftId);
         case 'save':
-            await handleSaveDraft(bot, query, chatId, userId, draftId);
-            break;
+            return handleSaveDraft(bot, query, chatId, userId, draftId);
         default:
-            console.warn('[DraftHandler] Unexpected draft action:', action);
-            break;
+            return { remember: false };
     }
 }
 
@@ -54,7 +70,7 @@ async function handleApproveDraft(bot, query, chatId, userId, draftId) {
     const draft = approveDraft(userId, draftId);
     if (!draft) {
         await bot.sendMessage(chatId, `⚠️ Draft #${draftId} not found.`);
-        return;
+        return { remember: false };
     }
 
     await _updateReviewCard(
@@ -63,20 +79,23 @@ async function handleApproveDraft(bot, query, chatId, userId, draftId) {
         `✅ *Draft #${draftId} approved!*
 _Your sticker is ready to be added to a collection._`
     );
+    return { remember: true };
 }
 
 async function handleRetryDraft(bot, query, chatId, userId, draftId) {
-    // Check limits before creating a new draft
+    // Check limits before creating a new draft. Do not remember the denial:
+    // the same Telegram update is already deduped, and a later tap should
+    // succeed once the user is under the limit again.
     const check = canCreate(userId);
     if (!check.allowed) {
         await bot.sendMessage(chatId, check.message, { parse_mode: 'Markdown' });
-        return;
+        return { remember: false, reason: 'limit' };
     }
 
     const original = retryDraft(userId, draftId);
     if (!original) {
         await bot.sendMessage(chatId, `⚠️ Draft #${draftId} not found.`);
-        return;
+        return { remember: false };
     }
 
     // Update the old card to show it's been retried
@@ -87,23 +106,32 @@ async function handleRetryDraft(bot, query, chatId, userId, draftId) {
     );
 
     // Re-process the original source image if available (Phase 1: reuse fileId)
+    let newDraft;
     try {
-        const newDraft = createDraft(userId, {
+        newDraft = createDraft(userId, {
             fileId: original.fileId,
             fileUniqueId: original.fileUniqueId,
             sourceMessageId: original.sourceMessageId,
             chatId,
         });
-
         recordCreation(userId);
+    } catch (err) {
+        console.error('[DraftHandler] Retry error:', err.message);
+        await bot.sendMessage(chatId, `❌ Retry failed: _${err.message}_`, {
+            parse_mode: 'Markdown',
+        });
+        const wrapped = new Error(err.message);
+        wrapped.handled = true;
+        throw wrapped;
+    }
 
+    try {
         const reviewMsg = await bot.sendPhoto(
             chatId,
             newDraft.fileId,
             {
                 caption:
-                    `✨ *Retry – Draft #${newDraft.id} ready!*
-` +
+                    `✨ *Retry – Draft #${newDraft.id} ready!*\n` +
                     `Review your sticker and choose an action:`,
                 parse_mode: 'Markdown',
                 reply_markup: draftReviewKeyboard(newDraft.id),
@@ -111,18 +139,20 @@ async function handleRetryDraft(bot, query, chatId, userId, draftId) {
         );
         setReviewMessageId(userId, newDraft.id, reviewMsg.message_id);
     } catch (err) {
-        console.error('[DraftHandler] Retry error:', err.message);
+        console.error('[DraftHandler] Retry notify error:', err.message);
         await bot.sendMessage(chatId, `❌ Retry failed: _${err.message}_`, {
             parse_mode: 'Markdown',
-        });
+        }).catch(() => {});
     }
+
+    return { remember: true, draftId: newDraft.id };
 }
 
 async function handleTrashDraft(bot, query, chatId, userId, draftId) {
     const draft = trashDraft(userId, draftId);
     if (!draft) {
         await bot.sendMessage(chatId, `⚠️ Draft #${draftId} not found.`);
-        return;
+        return { remember: false };
     }
 
     await _updateReviewCard(
@@ -131,13 +161,14 @@ async function handleTrashDraft(bot, query, chatId, userId, draftId) {
         `🗑 *Draft #${draftId} trashed.*
 _It will be automatically removed after the retention period._`
     );
+    return { remember: true };
 }
 
 async function handleSaveDraft(bot, query, chatId, userId, draftId) {
     const draft = saveDraftForLater(userId, draftId);
     if (!draft) {
         await bot.sendMessage(chatId, `⚠️ Draft #${draftId} not found.`);
-        return;
+        return { remember: false };
     }
 
     await _updateReviewCard(
@@ -146,6 +177,7 @@ async function handleSaveDraft(bot, query, chatId, userId, draftId) {
         `💾 *Draft #${draftId} saved to your Draft Vault.*
 _Find it later with /drafts._`
     );
+    return { remember: true };
 }
 
 

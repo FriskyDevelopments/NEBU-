@@ -6,13 +6,17 @@ import {
   createCommand,
   createSession,
   healthSnapshot,
+  IdempotencyConflictError,
   listCommands,
+  listFailedExecutorJobs,
   registerHeartbeat,
   requireAuth,
+  retryFailedCommand,
   updateCommandExecution,
 } from "./service";
 import { nebulosaState } from "./state";
 import { isTelegramActive } from "./telegram";
+import { requireExecutorAuth } from "./executor-auth";
 
 
 const requestCounts = new Map<string, { count: number; resetAt: number }>();
@@ -37,11 +41,11 @@ function rateLimit(maxPerMinute: number) {
 }
 
 export function registerNebulosaRoutes(app: Express) {
-  app.get("/api/v1/telegram/status", (_req, res) => {
+  app.get("/api/v1/telegram/status", requireAuth("command:view"), (_req, res) => {
     res.json({ active: isTelegramActive() });
   });
 
-  app.get("/api/v1/health", (_req, res) => {
+  app.get("/api/v1/health", requireAuth("command:view"), (_req, res) => {
     res.json(healthSnapshot());
   });
 
@@ -94,17 +98,36 @@ export function registerNebulosaRoutes(app: Express) {
   app.post("/api/v1/commands", requireAuth("command:write"), rateLimit(30), (req, res) => {
     try {
       const operator = (req as any).operator;
-      const command = createCommand(operator.username, req.body);
-      res.status(201).json(command);
-    } catch {
+      const idempotencyKey = req.get("Idempotency-Key");
+      const { command, created } = createCommand(operator.username, req.body, idempotencyKey);
+      res.setHeader("Idempotent-Replayed", String(!created));
+      res.status(created ? 201 : 200).json(command);
+    } catch (error) {
+      if (error instanceof IdempotencyConflictError) {
+        return res.status(409).json({
+          code: "idempotency_conflict",
+          message: error.message,
+        });
+      }
       res.status(400).json({ code: "invalid_command", message: "Command payload is invalid." });
+    }
+  });
+
+  app.post("/api/v1/commands/:commandId/retry", requireAuth("command:write"), (req, res) => {
+    try {
+      const operator = (req as any).operator;
+      const command = retryFailedCommand(req.params.commandId as string, operator.username);
+      if (!command) return res.status(404).json({ code: "not_found", message: "Command not found." });
+      res.json(command);
+    } catch (error) {
+      res.status(409).json({ code: "not_retryable", message: (error as Error).message });
     }
   });
 
   app.post("/api/v1/commands/:commandId/cancel", requireAuth("command:cancel"), (req, res) => {
     try {
       const operator = (req as any).operator;
-      const command = cancelCommand(req.params.commandId, operator.username);
+      const command = cancelCommand(String(req.params.commandId), operator.username);
       if (!command) return res.status(404).json({ code: "not_found", message: "Command not found." });
       res.json(command);
     } catch (error) {
@@ -112,16 +135,16 @@ export function registerNebulosaRoutes(app: Express) {
     }
   });
 
-  app.post("/api/v1/executor/heartbeat", rateLimit(120), (req, res) => {
+  app.post("/api/v1/executor/heartbeat", rateLimit(120), requireExecutorAuth, (req, res) => {
     try {
-      registerHeartbeat(req.body, req.headers["x-nebulosa-signature"] as string | undefined);
+      registerHeartbeat(req.body);
       res.status(202).json({ accepted: true });
     } catch {
       res.status(401).json({ code: "invalid_signature", message: "Executor authentication failed." });
     }
   });
 
-  app.post("/api/v1/executor/claim", rateLimit(120), (req, res) => {
+  app.post("/api/v1/executor/claim", rateLimit(120), requireExecutorAuth, (req, res) => {
     try {
       const command = claimCommand(req.body);
       if (!command) return res.status(204).send();
@@ -131,7 +154,7 @@ export function registerNebulosaRoutes(app: Express) {
     }
   });
 
-  app.post("/api/v1/executor/report", rateLimit(120), (req, res) => {
+  app.post("/api/v1/executor/report", rateLimit(120), requireExecutorAuth, (req, res) => {
     try {
       const command = updateCommandExecution(req.body);
       if (!command) return res.status(404).json({ code: "not_found", message: "Command not found." });
@@ -151,5 +174,9 @@ export function registerNebulosaRoutes(app: Express) {
 
   app.get("/api/v1/executors", requireAuth("command:view"), (_req, res) => {
     res.json([...nebulosaState.executors.values()]);
+  });
+
+  app.get("/api/v1/executor/jobs/failed", requireAuth("command:view"), (_req, res) => {
+    res.json(listFailedExecutorJobs());
   });
 }
