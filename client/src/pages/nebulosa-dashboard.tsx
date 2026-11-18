@@ -25,12 +25,22 @@ type SessionSummary = {
   alerts: number;
 };
 
+type CommandFailure = {
+  attempt: number;
+  error: string;
+  failedAt: string;
+};
+
 type Command = {
   id: string;
   type: string;
   status: string;
   requestedBy: string;
   createdAt: string;
+  attempt?: number;
+  maxAttempts?: number;
+  error?: string | null;
+  failures?: CommandFailure[];
 };
 
 type Alert = { id: string; severity: string; message: string };
@@ -39,8 +49,8 @@ type FlowState = "base" | "active" | "signal";
 
 export default function NebulosaDashboard() {
   const queryClient = useQueryClient();
-  const [username, setUsername] = useState("admin");
-  const [password, setPassword] = useState("ChangeMe_Admin123!");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [sessionId] = useState("session-main");
   const [commandInput, setCommandInput] = useState("/zoom admit all");
   const [flowState, setFlowState] = useState<{ intake: FlowState; transform: FlowState; express: FlowState }>({
@@ -50,6 +60,7 @@ export default function NebulosaDashboard() {
   });
   const [reactionLog, setReactionLog] = useState<Array<ReturnType<typeof transformToStix>>>([]);
   const [expressLog, setExpressLog] = useState<string[]>([]);
+  const [commandFeedback, setCommandFeedback] = useState<{ error: boolean; message: string } | null>(null);
 
   const sessionQuery = useQuery<SessionSummary>({
     queryKey: ["session-summary"],
@@ -103,14 +114,32 @@ export default function NebulosaDashboard() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["commands"] }),
   });
 
+  const retryCommandMutation = useMutation({
+    mutationFn: (commandId: string) => apiRequest("POST", `/api/v1/commands/${commandId}/retry`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["commands"] });
+      queryClient.invalidateQueries({ queryKey: ["alerts"] });
+    },
+  });
+
   const handleParsedCommand = async (rawCommand: string) => {
+    if (createCommandMutation.isPending || !rawCommand.trim()) return;
     const parsed = parseNebuCommand(rawCommand, sessionId);
     if (!parsed) {
-      setExpressLog((prev) => ["Command not recognized. Available: /zoom admit all · /zoom mute all · /zoom lock room · /capture moment", ...prev].slice(0, 6));
+      setCommandFeedback({ error: true, message: "Command not recognized. Choose a shortcut below or check the available commands." });
       return;
     }
 
+    setCommandFeedback(null);
     setFlowState({ intake: "active", transform: "base", express: "base" });
+    try {
+      await createCommandMutation.mutateAsync(zoomCommandToApiPayload(parsed));
+    } catch {
+      setFlowState({ intake: "base", transform: "base", express: "base" });
+      setCommandFeedback({ error: true, message: "Could not queue the command. Check your connection and session, then try again." });
+      return;
+    }
+
     const intake = parsed.canonicalType === "capture.moment" ? zoomCaptureToIntake(sessionId) : zoomEventToIntake(sessionId, parsed.raw);
 
     setFlowState({ intake: "signal", transform: "active", express: "base" });
@@ -123,14 +152,28 @@ export default function NebulosaDashboard() {
     const discord = toDiscordMessage(packet);
     setExpressLog((prev) => [`${telegram}`, `${discord}`, ...prev].slice(0, 8));
 
-    await createCommandMutation.mutateAsync(zoomCommandToApiPayload(parsed));
     setFlowState({ intake: "signal", transform: "signal", express: "signal" });
+    setCommandFeedback({ error: false, message: "Command queued. Check the queue for execution status." });
   };
 
-  const sortedCommands = useMemo(
-    () => [...(commandsQuery.data ?? [])].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)),
-    [commandsQuery.data],
-  );
+  const sortedCommands = useMemo(() => {
+    const rank = (command: Command) => {
+      const failures = command.failures?.length ?? 0;
+      if (command.status === "failed") return 0;
+      if (command.status === "pending" && failures > 0) return 1;
+      return 2;
+    };
+    return [...(commandsQuery.data ?? [])].sort((a, b) => {
+      const byAttention = rank(a) - rank(b);
+      if (byAttention !== 0) return byAttention;
+      return +new Date(b.createdAt) - +new Date(a.createdAt);
+    });
+  }, [commandsQuery.data]);
+
+  const failedCommands = sortedCommands.filter((command) => command.status === "failed").length;
+  const retryingCommands = sortedCommands.filter(
+    (command) => command.status === "pending" && (command.failures?.length ?? 0) > 0,
+  ).length;
 
   if (sessionQuery.isError) {
     return (
@@ -141,11 +184,19 @@ export default function NebulosaDashboard() {
             <CardDescription>Authenticate to restore command routing and session visibility.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="username" />
-            <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="password" />
-            <Button onClick={() => loginMutation.mutate()} disabled={loginMutation.isPending}>
-              {loginMutation.isPending ? "Signing in…" : "Sign in"}
-            </Button>
+            <form className="space-y-3" onSubmit={(event) => {
+              event.preventDefault();
+              if (!loginMutation.isPending) loginMutation.mutate();
+            }}>
+              <label className="block text-sm font-medium" htmlFor="operator-username">Username</label>
+              <Input id="operator-username" autoComplete="username" required value={username} onChange={(e) => setUsername(e.target.value)} />
+              <label className="block text-sm font-medium" htmlFor="operator-password">Password</label>
+              <Input id="operator-password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+              {loginMutation.isError && <p role="alert" className="text-sm text-destructive">Could not sign in. Check your credentials and connection, then try again.</p>}
+              <Button type="submit" disabled={loginMutation.isPending}>
+                {loginMutation.isPending ? "Signing in…" : "Sign in"}
+              </Button>
+            </form>
           </CardContent>
         </Card>
       </div>
@@ -184,6 +235,7 @@ export default function NebulosaDashboard() {
                   isExecuting={createCommandMutation.isPending}
                   helperText="Available commands: /zoom admit all · /zoom mute all · /zoom lock room · /capture moment"
                 />
+                {commandFeedback && <p role={commandFeedback.error ? "alert" : "status"} className={`text-sm ${commandFeedback.error ? "text-destructive" : "text-muted-foreground"}`}>{commandFeedback.message}</p>}
                 <div className="rounded-md border p-3">
                   <div className="text-sm font-medium mb-2">Express Feed</div>
                   <div className="space-y-1 text-xs text-muted-foreground">
@@ -206,6 +258,8 @@ export default function NebulosaDashboard() {
                       operatorRole: sessionQuery.data?.operator.role ?? "-",
                       activeExecutors: sessionQuery.data?.activeExecutors ?? 0,
                       pendingCommands: sessionQuery.data?.pendingCommands ?? 0,
+                      failedCommands,
+                      retryingCommands,
                       alerts: alertsQuery.data?.length ?? 0,
                     }}
                   />
@@ -237,12 +291,40 @@ export default function NebulosaDashboard() {
                 <CardContent className="grid md:grid-cols-2 gap-3">
                   <div className="space-y-2 max-h-72 overflow-auto">
                     {sortedCommands.length === 0 && <p className="rounded-md border border-dashed border-white/15 p-3 text-xs text-muted-foreground">Queue is clear. New commands will appear here in real time.</p>}
-                    {sortedCommands.slice(0, 12).map((command) => (
-                      <div key={command.id} className="rounded-md border p-2 text-sm">
-                        <div className="font-medium">{command.type}</div>
-                        <div className="text-xs text-muted-foreground">{command.status}</div>
-                      </div>
-                    ))}
+                    {sortedCommands.slice(0, 12).map((command) => {
+                      const failureCount = command.failures?.length ?? 0;
+                      const phase =
+                        command.status === "failed"
+                          ? "failed"
+                          : command.status === "pending" && failureCount > 0
+                            ? "retrying"
+                            : command.status;
+                      const lastError = command.error || command.failures?.[failureCount - 1]?.error;
+                      return (
+                        <div key={command.id} className="rounded-md border p-2 text-sm">
+                          <div className="executor-job-title">{command.type}</div>
+                          <div className="executor-job-meta">
+                            {phase}
+                            {command.attempt && command.maxAttempts
+                              ? ` · attempt ${command.attempt}/${command.maxAttempts}`
+                              : ""}
+                            {failureCount > 0 ? ` · ${failureCount} failure${failureCount === 1 ? "" : "s"}` : ""}
+                          </div>
+                          {lastError ? <div className="executor-job-error">{lastError}</div> : null}
+                          {command.status === "failed" ? (
+                            <Button
+                              className="mt-2"
+                              size="sm"
+                              variant="outline"
+                              disabled={retryCommandMutation.isPending}
+                              onClick={() => retryCommandMutation.mutate(command.id)}
+                            >
+                              Retry job
+                            </Button>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
                   <div className="space-y-2 max-h-72 overflow-auto">
                     {(alertsQuery.data ?? []).length === 0 && <p className="rounded-md border border-dashed border-white/15 p-3 text-xs text-muted-foreground">No active alerts. The system is operating within expected thresholds.</p>}
