@@ -9,36 +9,26 @@ const { handleDraftCallback, handleDraftsCommand, handleTrashCommand } = require
 const { handleCatalogCommand, handleMyStickerCommand } = require('./handlers/catalogHandler');
 const { sendAnimationStudio, handleAnimationCallback } = require('./handlers/animationHandler');
 const { usageSummary } = require('../services/usageService');
-
-function withHandlerErrorBoundary(bot, handlerName, handler) {
-    return async (...args) => {
-        try {
-            await handler(...args);
-        } catch (error) {
-            console.error(`❌ Bot handler failed (${handlerName}):`, error);
-
-            const maybeMsg = args[0];
-            const maybeChatId = maybeMsg && maybeMsg.chat && maybeMsg.chat.id;
-
-            if (maybeChatId) {
-                await bot.sendMessage(
-                    maybeChatId,
-                    '⚠️ Something went wrong while processing your request. Please try again.'
-                );
-            }
-        }
-    };
-}
+const {
+    createRetryGuard,
+    installProcessUpdateStamp,
+    withRetrySafeHandler,
+} = require('./retryGuard');
 
 /**
  * Create and configure the Stix Magic Telegram bot.
  *
  * @param {string} token       – Telegram Bot API token
- * @param {object} [options]   – Forwarded to TelegramBot constructor
+ * @param {object} [options]   – Forwarded to TelegramBot constructor.
+ *   `options.updateGuard` is kept local and is not forwarded.
  * @returns {TelegramBot}
  */
 function createBot(token, options = {}) {
-    const bot = new TelegramBot(token, options);
+    const { updateGuard, ...telegramOptions } = options;
+    const guard = updateGuard || createRetryGuard();
+    const bot = new TelegramBot(token, telegramOptions);
+    installProcessUpdateStamp(bot);
+    const guardHandler = (name, handler) => withRetrySafeHandler(bot, name, handler, guard);
 
     bot.on('polling_error', (error) => {
         console.error('❌ Telegram polling error:', error.message);
@@ -51,56 +41,56 @@ function createBot(token, options = {}) {
     // ------------------------------------------------------------------
     // /start  →  Magic Center
     // ------------------------------------------------------------------
-    bot.onText(/^\/start/, withHandlerErrorBoundary(bot, '/start', async (msg) => {
+    bot.onText(/^\/start/, guardHandler('/start', async (msg) => {
         await sendMagicCenter(bot, msg.chat.id);
     }));
 
     // ------------------------------------------------------------------
     // /menu   →  Magic Center (alias)
     // ------------------------------------------------------------------
-    bot.onText(/^\/menu/, withHandlerErrorBoundary(bot, '/menu', async (msg) => {
+    bot.onText(/^\/menu/, guardHandler('/menu', async (msg) => {
         await sendMagicCenter(bot, msg.chat.id);
     }));
 
     // ------------------------------------------------------------------
     // /animate  →  Animation Studio
     // ------------------------------------------------------------------
-    bot.onText(/^\/animate/, withHandlerErrorBoundary(bot, '/animate', async (msg) => {
+    bot.onText(/^\/animate/, guardHandler('/animate', async (msg) => {
         await sendAnimationStudio(bot, msg.chat.id);
     }));
 
     // ------------------------------------------------------------------
     // /drafts →  Draft Vault
     // ------------------------------------------------------------------
-    bot.onText(/^\/drafts/, withHandlerErrorBoundary(bot, '/drafts', async (msg) => {
+    bot.onText(/^\/drafts/, guardHandler('/drafts', async (msg) => {
         await handleDraftsCommand(bot, msg);
     }));
 
     // ------------------------------------------------------------------
     // /trash  →  Trash bin
     // ------------------------------------------------------------------
-    bot.onText(/^\/trash/, withHandlerErrorBoundary(bot, '/trash', async (msg) => {
+    bot.onText(/^\/trash/, guardHandler('/trash', async (msg) => {
         await handleTrashCommand(bot, msg);
     }));
 
     // ------------------------------------------------------------------
     // /catalog
     // ------------------------------------------------------------------
-    bot.onText(/^\/catalog/, withHandlerErrorBoundary(bot, '/catalog', async (msg) => {
+    bot.onText(/^\/catalog/, guardHandler('/catalog', async (msg) => {
         await handleCatalogCommand(bot, msg);
     }));
 
     // ------------------------------------------------------------------
     // /mystickers
     // ------------------------------------------------------------------
-    bot.onText(/^\/mystickers/, withHandlerErrorBoundary(bot, '/mystickers', async (msg) => {
+    bot.onText(/^\/mystickers/, guardHandler('/mystickers', async (msg) => {
         await handleMyStickerCommand(bot, msg);
     }));
 
     // ------------------------------------------------------------------
     // /plans  →  Usage summary
     // ------------------------------------------------------------------
-    bot.onText(/^\/plans/, withHandlerErrorBoundary(bot, '/plans', async (msg) => {
+    bot.onText(/^\/plans/, guardHandler('/plans', async (msg) => {
         const userId = String(msg.from.id);
         const summary = usageSummary(userId);
         await bot.sendMessage(
@@ -113,7 +103,7 @@ function createBot(token, options = {}) {
     // ------------------------------------------------------------------
     // /help
     // ------------------------------------------------------------------
-    bot.onText(/^\/help/, withHandlerErrorBoundary(bot, '/help', async (msg) => {
+    bot.onText(/^\/help/, guardHandler('/help', async (msg) => {
         await bot.sendMessage(
             msg.chat.id,
             `✨ *Stix Magic Help*\n\n` +
@@ -138,11 +128,11 @@ function createBot(token, options = {}) {
     // ------------------------------------------------------------------
     // Incoming photos & documents → Magic Cut flow
     // ------------------------------------------------------------------
-    bot.on('photo', withHandlerErrorBoundary(bot, 'photo', async (msg) => {
+    bot.on('photo', guardHandler('photo', async (msg) => {
         await handleImageMessage(bot, msg);
     }));
 
-    bot.on('document', withHandlerErrorBoundary(bot, 'document', async (msg) => {
+    bot.on('document', guardHandler('document', async (msg) => {
         // Only process image documents
         if (msg.document && msg.document.mime_type && msg.document.mime_type.startsWith('image/')) {
             await handleImageMessage(bot, msg);
@@ -152,7 +142,7 @@ function createBot(token, options = {}) {
     // ------------------------------------------------------------------
     // Callback queries (inline button presses)
     // ------------------------------------------------------------------
-    bot.on('callback_query', withHandlerErrorBoundary(bot, 'callback_query', async (query) => {
+    bot.on('callback_query', guardHandler('callback_query', async (query) => {
         const data = query.data || '';
 
         if (data.startsWith('mc:')) {

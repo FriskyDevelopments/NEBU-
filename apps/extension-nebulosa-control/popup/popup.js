@@ -14,6 +14,8 @@ const statusDot = document.getElementById('status-dot');
 const statusText = document.getElementById('status-text');
 const pinnedList = document.getElementById('pinned-list');
 const pinnedNames = document.getElementById('pinned-names');
+const undoButton = document.getElementById('undo-host-action');
+const undoResult = document.getElementById('undo-result');
 
 // Diagnostics
 const diagToggleBtn = document.getElementById('diag-toggle');
@@ -33,6 +35,7 @@ const diagReason = document.getElementById('diag-reason');
 const diagObservers = document.getElementById('diag-observers');
 const diagLastEvent = document.getElementById('diag-last-event');
 const diagEventTime = document.getElementById('diag-event-time');
+const moderationDryRunToggle = document.getElementById('toggle-moderation-dry-run');
 
 const toggles = {
   multipin: document.getElementById('toggle-multipin'),
@@ -78,6 +81,30 @@ Object.entries(toggles).forEach(([mod, input]) => {
   });
 });
 
+moderationDryRunToggle.addEventListener('change', () => {
+  chrome.runtime.sendMessage(
+    { type: 'SET_MODERATION_DRY_RUN', dryRun: moderationDryRunToggle.checked },
+    (response) => {
+      if (chrome.runtime.lastError || !response || !response.ok) {
+        moderationDryRunToggle.checked = !moderationDryRunToggle.checked;
+      }
+    }
+  );
+});
+
+undoButton.addEventListener('click', () => {
+  undoButton.disabled = true;
+  undoResult.textContent = 'Undoing…';
+  chrome.runtime.sendMessage({ type: 'UNDO_HOST_ACTION' }, (response) => {
+    if (chrome.runtime.lastError || !response || !response.ok) {
+      undoResult.textContent = 'Undo failed. The action is still available.';
+      undoButton.disabled = false;
+      return;
+    }
+    undoResult.textContent = `Undid ${response.action.label}`;
+  });
+});
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function _applyStatus(status) {
@@ -88,11 +115,13 @@ function _applyStatus(status) {
   Object.values(toggles).forEach((t) => {
     t.disabled = !interactive;
   });
+  moderationDryRunToggle.disabled = !interactive;
 
   toggles.multipin.checked = !!status.multipin;
   toggles.cameraMonitor.checked = !!status.cameraMonitor;
   toggles.moderation.checked = !!status.moderation;
   toggles.waitingRoom.checked = !!status.waitingRoom;
+  moderationDryRunToggle.checked = !!status.moderationDryRun;
 
   // Show pinned participants list
   const pinned = Array.isArray(status.pinned) ? status.pinned : [];
@@ -102,6 +131,10 @@ function _applyStatus(status) {
   } else {
     pinnedList.classList.add('hidden');
   }
+
+  const undo = status.undo || { canUndo: false, action: null };
+  undoButton.disabled = !undo.canUndo;
+  undoButton.textContent = undo.action ? `Undo ${undo.action.label}` : 'Nothing to undo';
 
   // Diagnostics
   _updateDiagnostics(status);
@@ -126,7 +159,9 @@ function _updateDiagnostics(status) {
 
   if (status.lastEvent) {
     const { type, payload, ts } = status.lastEvent;
-    diagLastEvent.textContent = `${type}${payload?.name ? ` — ${payload.name}` : ''}`;
+    const subject = payload?.name || payload?.sender;
+    const dryRun = payload?.dryRun ? ' (dry run)' : '';
+    diagLastEvent.textContent = `${type}${subject ? ` — ${subject}` : ''}${dryRun}`;
     diagLastEvent.className = 'diag-val ok';
     if (ts) {
       const ago = Math.round((Date.now() - ts) / 1000);
