@@ -23,21 +23,25 @@ export function CommandBar({
         <h2 className="text-lg font-semibold">Command Parser</h2>
         <XiGlyph state={isExecuting ? "signal" : "base"} label={isExecuting ? "executing" : "standby"} />
       </div>
-      <div className="flex gap-2">
+      <form className="flex gap-2" onSubmit={(event) => {
+        event.preventDefault();
+        if (!isExecuting && value.trim()) onSubmit();
+      }}>
         <Input
+          aria-label="Command"
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder="Try /zoom mute all"
           className="font-mono"
         />
-        <Button onClick={onSubmit} disabled={isExecuting}>
+        <Button type="submit" disabled={isExecuting || !value.trim()}>
           {isExecuting ? "Running…" : "Run"}
         </Button>
-      </div>
+      </form>
       <p className="text-xs text-muted-foreground">{helperText}</p>
       <div className="flex flex-wrap gap-2">
         {["/zoom admit all", "/zoom mute all", "/zoom lock room", "/capture moment"].map((quick) => (
-          <Button key={quick} variant="outline" size="sm" onClick={() => onQuickCommand(quick)}>
+          <Button key={quick} variant="outline" size="sm" disabled={isExecuting} onClick={() => onQuickCommand(quick)}>
             {quick}
           </Button>
         ))}
