@@ -16,7 +16,8 @@
     "test:meeting-audit": "node --test tests/unit/meeting-command-audit.test.cjs",
     "test:bot-health": "node --test tests/bot-health.test.cjs",
     "test:org-isolation": "node --test tests/nebulosa-organization-isolation.test.cjs",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "test:release": "node --test tests/release/*.test.cjs"
   },
   "keywords": [
     "telegram",
