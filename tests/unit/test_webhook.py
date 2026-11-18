@@ -2,6 +2,7 @@
 import hashlib
 import hmac
 import json
+import secrets
 
 import pytest
 
@@ -11,7 +12,7 @@ from integrations.github.webhook import (
     WebhookSignatureError,
 )
 
-_SECRET = "test-webhook-secret"
+_SECRET = secrets.token_hex(32)
 
 PUSH_PAYLOAD = {
     "action": None,
@@ -66,25 +67,39 @@ class TestWebhookSignatureVerification:
         with pytest.raises(WebhookSignatureError):
             handler.parse(headers, raw)
 
-    def test_no_secret_skips_verification(self):
-        handler = GitHubWebhookHandler(webhook_secret=None)
+    @pytest.mark.parametrize("secret", [None, ""])
+    def test_no_secret_rejects_delivery(self, secret):
+        handler = GitHubWebhookHandler(webhook_secret=secret)
         raw = json.dumps(PUSH_PAYLOAD).encode()
         headers = {
             "x-github-event": "push",
             "x-github-delivery": "delivery-003",
         }
-        event = handler.parse(headers, raw)
-        assert event.event_name == "push"
+        with pytest.raises(WebhookSignatureError):
+            handler.parse(headers, raw)
+
+    @pytest.mark.parametrize("signature", ["sha1=abc", "sha256=", "sha256=" + "é" * 64])
+    def test_malformed_signature_rejects_delivery(self, signature):
+        handler = GitHubWebhookHandler(webhook_secret=_SECRET)
+        raw = json.dumps(PUSH_PAYLOAD).encode()
+        headers = _make_headers(raw)
+        headers["x-hub-signature-256"] = signature
+        with pytest.raises(WebhookSignatureError):
+            handler.parse(headers, raw)
+
+    def test_tampered_raw_body_rejects_delivery(self):
+        handler = GitHubWebhookHandler(webhook_secret=_SECRET)
+        raw = json.dumps(PUSH_PAYLOAD).encode()
+        with pytest.raises(WebhookSignatureError):
+            handler.parse(_make_headers(raw), raw + b" ")
 
 
 class TestWebhookEventParsing:
     def _parse(self, payload: dict, event_name: str = "push") -> WebhookEvent:
-        handler = GitHubWebhookHandler(webhook_secret=None)
+        handler = GitHubWebhookHandler(webhook_secret=_SECRET)
         raw = json.dumps(payload).encode()
-        headers = {
-            "x-github-event": event_name,
-            "x-github-delivery": "delivery-abc",
-        }
+        headers = _make_headers(raw)
+        headers["x-github-event"] = event_name
         return handler.parse(headers, raw)
 
     def test_installation_id_extracted(self):

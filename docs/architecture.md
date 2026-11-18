@@ -21,7 +21,7 @@ Nebulosa/
 │       │   └── zoom.js               # Content script entry point
 │       ├── modules/                  # Business logic modules
 │       │   ├── multipin.js           # ✅ Hand-raise → pin automation
-│       │   ├── camera-monitor.js     # ⚡ Partial: tracking done, reminder TBD
+│       │   ├── camera-monitor.js     # ✅ Camera-off tracking and private reminders
 │       │   ├── moderation.js         # 🔲 Scaffold: detection done, action TBD
 │       │   └── waiting-room.js       # 🔲 Scaffold: architecture only
 │       ├── integrations/             # Bundled copies of shared integration code
@@ -72,7 +72,7 @@ packages/event-bus/index.js   (pub/sub: emit / on / off)
 modules/multipin.js   modules/camera-monitor.js  ...
    │
    ▼
-integrations/zoom/adapter.js  (host actions: pin, unpin)
+integrations/zoom/adapter.js  (host actions: pin, unpin + bounded undo history)
    │
    ▼
 Zoom Web Client DOM
@@ -99,7 +99,7 @@ The background worker caches the last known status so the popup always has data 
 | Module | Status | Description |
 |---|---|---|
 | multipin | ✅ Implemented | Hand-raise + camera-on → auto-pin. 60s grace on camera-off. |
-| camera-monitor | ⚡ Partial | Tracks camera-off duration. Reminder chat-send not yet validated in extension mode. |
+| camera-monitor | ✅ Implemented | Tracks camera-off duration and sends private Zoom chat reminders. |
 | moderation | 🔲 Scaffold | Chat keyword detection wired. Mute/remove DOM action TBD. |
 | waiting-room | 🔲 Scaffold | Architecture boundary only. Auto-admit rules TBD. |
 
@@ -112,6 +112,7 @@ The background worker caches the last known status so the popup always has data 
 3. **Preserved behaviour** — The original working multipin logic from `zoomBrowserBot.js` is preserved and wrapped, not rewritten.
 4. **No fake completeness** — Scaffold modules are clearly marked with TODOs and `SCAFFOLD` status.
 5. **Cross-browser readiness** — Extension code currently targets Chrome `chrome.*` APIs; cross-browser support for Firefox/Safari will be added via a standard `browser.*`-style wrapper/polyfill. The DOM logic uses standard Web APIs.
+6. **Safe undo** — Successful reversible host actions (pin and unpin) expose their inverse in the popup. Irreversible actions are never added to undo history.
 
 ---
 
