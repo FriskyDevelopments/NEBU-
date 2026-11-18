@@ -8,6 +8,7 @@ WORKDIR /app
 COPY package.json package.json
 COPY railway-complete-bot.js .
 COPY bot/webhookHealth.js bot/webhookHealth.js
+COPY bot/meetingCommandAudit.js ./bot/meetingCommandAudit.js
 
 # Install dependencies
 RUN npm install --production

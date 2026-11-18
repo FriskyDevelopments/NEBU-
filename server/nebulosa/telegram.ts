@@ -75,11 +75,8 @@ export function startTelegramBot() {
         return;
     }
 
-    // Acknowledge receipt
-    telegramBot?.sendMessage(chatId, "PROCESSING COMMAND...");
-
     try {
-      const cmd = createCommand(`telegram:${userId}`, {
+      const { command: cmd, created } = createCommand(`telegram:${userId}`, {
         type: commandType,
         payload: {
           sessionId: "session-main",
@@ -90,7 +87,17 @@ export function startTelegramBot() {
           }
         },
         ttlSeconds: 60
-      });
+      }, `telegram:${chatId}:${msg.message_id}`);
+
+      if (!created) {
+        const existingReply = cmd.status === "succeeded"
+          ? cmd.result?.message ?? replyText
+          : "COMMAND ALREADY PROCESSING";
+        telegramBot?.sendMessage(chatId, existingReply);
+        return;
+      }
+
+      telegramBot?.sendMessage(chatId, "PROCESSING COMMAND...");
 
       // Override audit metadata since createCommand defaults to operator-ui
       cmd.auditMetadata.source = "telegram";

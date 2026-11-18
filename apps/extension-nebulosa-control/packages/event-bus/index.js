@@ -13,10 +13,10 @@
  *   camera_on            – a participant turned their camera on
  *   camera_off           – a participant turned their camera off
  *   chat_message         – a chat message was received
+ *   meeting_ended        – the meeting ended / user left; modules drop session state
  *
  * Reserved events (not yet emitted — planned):
  *   meeting_detected     – the extension detected a Zoom meeting page
- *   meeting_ended        – the meeting ended / user left
  */
 
 const DEBUG = typeof window !== 'undefined' && window.__NEBULOSA_DEBUG === true;

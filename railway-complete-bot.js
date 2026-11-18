@@ -4,6 +4,7 @@ const express = require('express');
 const axios = require('axios');
 const crypto = require('crypto');
 const WebhookHealth = require('./bot/webhookHealth');
+const { registerMeetingCommandAudit } = require('./bot/meetingCommandAudit');
 require('dotenv').config();
 
 class CompleteRailwayBot {
@@ -228,6 +229,7 @@ class CompleteRailwayBot {
     }
 
     setupTelegramBot() {
+        registerMeetingCommandAudit(this.bot);
         // Chat migration: Telegram moves a group to a supergroup and sends the new id.
         // If the control chat migrated, follow it and tell the owner how to persist it.
         this.bot.on('message', (msg) => {

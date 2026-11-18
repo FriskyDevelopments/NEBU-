@@ -1,7 +1,8 @@
-/* global window, document, MouseEvent */
+/* global window, document, MouseEvent, Event, InputEvent, KeyboardEvent */
 
 const ZoomSelectors = typeof require !== 'undefined' ? require('./selectors') : window.ZoomSelectors;
 const ZoomEvents = typeof require !== 'undefined' ? require('./events') : window.ZoomEvents;
+const HostActionHistory = typeof require !== 'undefined' ? require('./host-action-history') : window.NebulosaHostActionHistory;
 const bus = typeof require !== 'undefined' ? require('../../packages/event-bus') : window.NebulosaBus;
 
 const DEBUG = typeof window !== 'undefined' && window.__NEBULOSA_DEBUG === true;
@@ -53,7 +54,82 @@ function _findMenuItem(container, textPattern) {
   return null;
 }
 
-async function pinParticipant(name) {
+function _normaliseText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function _setInputValue(input, message) {
+  if (input.isContentEditable) {
+    input.textContent = message;
+  } else {
+    const prototype = Object.getPrototypeOf(input);
+    const descriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
+    if (descriptor && descriptor.set) descriptor.set.call(input, message);
+    else input.value = message;
+  }
+  const InputEventCtor = typeof InputEvent === 'function' ? InputEvent : Event;
+  input.dispatchEvent(new InputEventCtor('input', { bubbles: true, inputType: 'insertText', data: message }));
+}
+
+async function sendPrivateChatMessage(name, message) {
+  try {
+    let panel = _queryFirst(ZoomSelectors.CHAT_PANEL);
+    if (!panel) {
+      const openButton = _queryFirst(ZoomSelectors.CHAT_OPEN_BTN);
+      if (!openButton) return 'CHAT_BUTTON_NOT_FOUND';
+      openButton.click();
+      try { panel = await _waitFor(ZoomSelectors.CHAT_PANEL, 3000); } catch (_) { return 'CHAT_PANEL_NOT_FOUND'; }
+    }
+
+    const recipientButton = _queryFirst(ZoomSelectors.CHAT_RECIPIENT_BTN, panel);
+    if (!recipientButton) return 'RECIPIENT_BUTTON_NOT_FOUND';
+    recipientButton.click();
+
+    let recipientMenu;
+    try { recipientMenu = await _waitFor(ZoomSelectors.CHAT_RECIPIENT_MENU, 2500); } catch (_) { return 'RECIPIENT_MENU_NOT_FOUND'; }
+
+    const expectedName = _normaliseText(name);
+    const options = _queryAll(ZoomSelectors.CHAT_RECIPIENT_OPTION, recipientMenu);
+    const recipient = options.find((option) => {
+      const optionName = _normaliseText(option.getAttribute('aria-label') || option.textContent);
+      return optionName === expectedName || optionName.startsWith(`${expectedName} (`);
+    });
+    if (!recipient) {
+      document.body.click();
+      return 'RECIPIENT_NOT_FOUND';
+    }
+    recipient.click();
+
+    let input = _queryFirst(ZoomSelectors.CHAT_INPUT, panel);
+    if (!input) {
+      try { input = await _waitFor(ZoomSelectors.CHAT_INPUT, 2500); } catch (_) { return 'CHAT_INPUT_NOT_FOUND'; }
+    }
+    input.focus();
+    _setInputValue(input, message);
+
+    const sendButton = _queryFirst(ZoomSelectors.CHAT_SEND_BTN, panel);
+    if (sendButton && !sendButton.disabled) {
+      sendButton.click();
+    } else {
+      input.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'Enter',
+        code: 'Enter',
+        keyCode: 13,
+        which: 13,
+        bubbles: true,
+        cancelable: true,
+      }));
+    }
+
+    dbg('private_chat_message_sent', { recipient: name });
+    return 'MESSAGE_SENT';
+  } catch (err) {
+    console.error('[Nebulosa:ZoomAdapter] sendPrivateChatMessage error:', err);
+    return 'ERROR';
+  }
+}
+
+async function pinParticipant(name, options = {}) {
   try {
     const tiles = _queryAll(ZoomSelectors.VIDEO_TILE);
     let targetTile = null;
@@ -72,6 +148,15 @@ async function pinParticipant(name) {
     if (!pinItem) pinItem = _findMenuItem(menu, ZoomSelectors.PIN_OPTION_TEXT);
     if (!pinItem) { document.body.click(); return 'PIN_OPTION_NOT_FOUND'; }
     pinItem.click();
+    if (options.recordUndo !== false) {
+      HostActionHistory.record({
+        type: 'pin',
+        name,
+        label: `Pin ${name}`,
+        undo: async () => (await unpinParticipant(name, { recordUndo: false })) === 'MULTIPIN_REMOVED',
+      });
+      bus.emit('host_action_history_changed', HostActionHistory.getState());
+    }
     return 'MULTIPIN_GRANTED';
   } catch (err) {
     console.error('[Nebulosa:ZoomAdapter] pinParticipant error:', err);
@@ -79,7 +164,7 @@ async function pinParticipant(name) {
   }
 }
 
-async function unpinParticipant(name) {
+async function unpinParticipant(name, options = {}) {
   try {
     const tiles = _queryAll(ZoomSelectors.VIDEO_TILE);
     let targetTile = null;
@@ -97,6 +182,15 @@ async function unpinParticipant(name) {
     const unpinItem = _findMenuItem(menu, ZoomSelectors.UNPIN_OPTION_TEXT);
     if (!unpinItem) { document.body.click(); return 'UNPIN_OPTION_NOT_FOUND'; }
     unpinItem.click();
+    if (options.recordUndo !== false) {
+      HostActionHistory.record({
+        type: 'unpin',
+        name,
+        label: `Unpin ${name}`,
+        undo: async () => (await pinParticipant(name, { recordUndo: false })) === 'MULTIPIN_GRANTED',
+      });
+      bus.emit('host_action_history_changed', HostActionHistory.getState());
+    }
     return 'MULTIPIN_REMOVED';
   } catch (err) {
     console.error('[Nebulosa:ZoomAdapter] unpinParticipant error:', err);
@@ -106,19 +200,39 @@ async function unpinParticipant(name) {
 
 async function admitParticipant(name) {
   try {
+    if (typeof name !== 'string' || !name.trim()) return false;
+    const targetName = name.normalize('NFKC').replace(/\s+/g, ' ').trim().toLocaleLowerCase();
     const panel = _queryFirst(ZoomSelectors.WAITING_ROOM_PANEL);
     if (!panel) return false;
     const rows = _queryAll(ZoomSelectors.PARTICIPANT_ROW, panel);
+    const matches = [];
     for (const row of rows) {
-      const rowName = row.textContent.trim();
-      if (rowName.toLowerCase().includes(name.toLowerCase())) {
-        const admitBtn = _queryFirst(ZoomSelectors.WAITING_ROOM_ADMIT_BTN, row);
-        if (admitBtn) { admitBtn.click(); return true; }
-      }
+      const nameElement = _queryFirst(ZoomSelectors.PARTICIPANT_ROW_NAME, row);
+      if (!nameElement) continue;
+      const rowName = String(nameElement.textContent || '').normalize('NFKC').replace(/\s+/g, ' ').trim().toLocaleLowerCase();
+      if (rowName === targetName) matches.push(row);
     }
-    return false;
+    if (matches.length !== 1) return false;
+    const admitBtn = _queryFirst(ZoomSelectors.WAITING_ROOM_ADMIT_BTN, matches[0]);
+    if (!admitBtn) return false;
+    admitBtn.click();
+    return true;
   } catch (err) {
     console.error('[Nebulosa:ZoomAdapter] admitParticipant error:', err);
+    return false;
+  }
+}
+
+async function admitAll() {
+  try {
+    const panel = _queryFirst(ZoomSelectors.WAITING_ROOM_PANEL);
+    if (!panel) return false;
+    const admitAllButton = _queryFirst(ZoomSelectors.WAITING_ROOM_ADMIT_ALL_BTN, panel);
+    if (!admitAllButton) return false;
+    admitAllButton.click();
+    return true;
+  } catch (err) {
+    console.error('[Nebulosa:ZoomAdapter] admitAll error:', err);
     return false;
   }
 }
@@ -247,6 +361,7 @@ function init(options = {}) {
     onCameraOn: (payload) => bus.emit('camera_on', payload),
     onCameraOff: (payload) => bus.emit('camera_off', payload),
     onChatMessage: (payload) => bus.emit('chat_message', payload),
+    onMeetingEnded: (payload) => bus.emit('meeting_ended', payload || { reason: 'meeting_ended' }),
   });
 
   ZoomEvents.registerSelectorFailureCallback((payload) => {
@@ -261,6 +376,7 @@ function init(options = {}) {
 function destroy() {
   window.__NEBULOSA_ADAPTER_LOADED__ = false;
   ZoomEvents.stop();
+  HostActionHistory.clear();
   bus.clear();
   dbg('destroyed');
 }
@@ -269,6 +385,30 @@ function getDiagnosticsSnapshot() {
   return ZoomEvents.getDiagnosticsSnapshot();
 }
 
-const ZoomAdapter = { init, destroy, pinParticipant, unpinParticipant, admitParticipant, removeParticipant, muteParticipant, getDiagnosticsSnapshot };
+function getUndoState() {
+  return HostActionHistory.getState();
+}
+
+async function undoLastHostAction() {
+  const result = await HostActionHistory.undoLast();
+  if (result.ok) bus.emit('host_action_undone', result);
+  bus.emit('host_action_history_changed', HostActionHistory.getState());
+  return result;
+}
+
+const ZoomAdapter = {
+  init,
+  destroy,
+  pinParticipant,
+  unpinParticipant,
+  admitParticipant,
+  admitAll,
+  removeParticipant,
+  muteParticipant,
+  sendPrivateChatMessage,
+  getDiagnosticsSnapshot,
+  getUndoState,
+  undoLastHostAction,
+};
 if (typeof module !== 'undefined' && module.exports) module.exports = ZoomAdapter;
 else if (typeof window !== 'undefined') window.ZoomAdapter = ZoomAdapter;

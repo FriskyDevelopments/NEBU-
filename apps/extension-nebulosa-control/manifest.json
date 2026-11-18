@@ -39,12 +39,14 @@
         "integrations/zoom/wc-probe.js",
         "integrations/zoom/events.js",
         "integrations/zoom/state.js",
+        "integrations/zoom/host-action-history.js",
         "integrations/zoom/adapter.js",
         "modules/multipin.js",
         "modules/camera-monitor.js",
         "modules/moderation.js",
         "modules/waiting-room.js",
         "content/bootstrap-gate.js",
+        "content/meeting-session.js",
         "content/zoom.js"
       ],
       "run_at": "document_idle"
