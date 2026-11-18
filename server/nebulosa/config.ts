@@ -1,4 +1,25 @@
 import crypto from "crypto";
+
+// Production must fail closed before any sibling module is pulled in — this
+// file is also validated standalone, so the executor-retries import stays
+// below the check on purpose.
+const requiredProductionEnv = [
+  "NEBULOSA_ORGANIZATION_ID",
+  "NEBULOSA_SESSION_SECRET",
+  "NEBULOSA_EXECUTOR_SECRET",
+  "NEBULOSA_ADMIN_PASSWORD",
+  "NEBULOSA_OPERATOR_PASSWORD",
+  "NEBULOSA_VIEWER_PASSWORD",
+];
+
+// Fail closed in production before pulling in any sibling module — this file
+// is also validated standalone, so the check runs before the import below.
+if (process.env.NEBULOSA_ENV === "prod") {
+  for (const name of requiredProductionEnv) {
+    if (!process.env[name]?.trim()) throw new Error(`${name} must be provided in production`);
+  }
+}
+
 import { clampMaxAttempts } from "./executor-retries.ts";
 
 export type Environment = "dev" | "staging" | "prod";
@@ -25,16 +46,6 @@ export const config = {
 };
 
 if (config.environment === "prod") {
-  for (const name of [
-    "NEBULOSA_ORGANIZATION_ID",
-    "NEBULOSA_SESSION_SECRET",
-    "NEBULOSA_EXECUTOR_SECRET",
-    "NEBULOSA_ADMIN_PASSWORD",
-    "NEBULOSA_OPERATOR_PASSWORD",
-    "NEBULOSA_VIEWER_PASSWORD",
-  ]) {
-    if (!process.env[name]?.trim()) throw new Error(`${name} must be provided in production`);
-  }
   if (config.sessionSecret === defaultSessionSecret || config.executorSharedSecret === "local-executor-secret") {
     throw new Error("Development secrets must not be used in production");
   }

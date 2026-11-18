@@ -54,7 +54,7 @@ test('organization B cannot read or mutate organization A control state', async 
   await new Promise((resolve) => server.once('listening', resolve));
   t.after(() => new Promise((resolve) => { server.close(resolve); server.closeAllConnections(); }));
   const base = `http://127.0.0.1:${server.address().port}`;
-  const command = createCommand('admin', { type: 'session.mute_all', payload: { sessionId: 'meeting-a' } });
+  const { command } = createCommand('admin', { type: 'session.mute_all', payload: { sessionId: 'meeting-a' } });
   const heartbeat = { executorId: 'executor-a', nonce: crypto.randomBytes(16).toString('hex') };
   const claim = { executorId: 'executor-a', commandId: command.id };
   const report = { ...claim, status: 'running' };
